@@ -1,0 +1,9 @@
+{
+  "MainJsonRpcAddress":"http://polaris1.ont.io:20336",
+  "SideJsonRpcAddress":"http://polaris1.ont.io:20336",
+  "sideChainID": 1,
+  "WalletFile":"./wallet.dat",
+  "Interval": 2,
+  "GasPrice":500,
+  "GasLimit":200000
+}
