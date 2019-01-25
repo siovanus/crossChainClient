@@ -1,12 +1,11 @@
 package service
 
 import (
-	"time"
-
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/smartcontract/service/native/side_chain"
+	"hash/fnv"
 )
 
 type SyncService struct {
@@ -29,9 +28,12 @@ func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, sideSdk *sdk.On
 func (this *SyncService) Run() {
 	for {
 		//get current block header height of main chain
-		mainHeight, err := this.getMainCurrentHeaderHeight(this.config.SideChainID)
+		hash := fnv.New32a()
+		hash.Write([]byte(this.config.SideChainID))
+		mainHeight, err := this.getMainCurrentHeaderHeight(hash.Sum32())
 		if err != nil {
 			log.Errorf("this.getMainCurrentHeaderHeight error: %s", err)
+			return
 		}
 
 		//get current block header height of side chain
@@ -40,15 +42,16 @@ func (this *SyncService) Run() {
 			log.Errorf("this.sideSdk.GetCurrentBlockHeight error: %s", err)
 		}
 
-		if mainHeight <= sideHeight {
-			log.Infof("main chain height is %s and side chain height is %s, begin to sync header", mainHeight, sideHeight)
+		gap := sideHeight - mainHeight
+		if gap > 0 {
+			log.Infof("main chain height is %d and side chain height is %d, begin to sync header", mainHeight, sideHeight)
 			//get header from side chain
 			param := new(side_chain.SyncBlockHeaderParam)
 			for i := mainHeight + 1; i <= sideHeight; i++ {
-				log.Infof("fetching block %s", i)
-				block, err := this.sideSdk.GetBlockByHeight(i)
+				log.Infof("fetching block %d", i)
+				block, err := this.sideSdk.GetSideChainBlockByHeight(i)
 				if err != nil {
-					log.Errorf("this.sideSdk.GetBlockByHeight error: %s", err)
+					log.Errorf("this.sideSdk.GetSideChainBlockByHeight error: %s", err)
 				}
 				header := block.Header.ToArray()
 				param.Headers = append(param.Headers, header)
@@ -58,7 +61,8 @@ func (this *SyncService) Run() {
 			if err != nil {
 				log.Errorf("syncBlockHeaderToMain error: %s", err)
 			}
+			this.waitForMainBlock()
 		}
-		time.Sleep(time.Duration(this.config.Interval) * time.Second)
+		this.waitForSideBlock()
 	}
 }

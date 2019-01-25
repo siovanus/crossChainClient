@@ -7,6 +7,7 @@ import (
 	"github.com/ontio/ontology/smartcontract/service/native/governance"
 	"github.com/ontio/ontology/smartcontract/service/native/side_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
+	"time"
 )
 
 var codeVersion = byte(0)
@@ -39,6 +40,20 @@ func (this *SyncService) syncBlockHeaderToMain(param *side_chain.SyncBlockHeader
 	}
 	log.Infof("syncBlockHeaderToMain txHash is :", txHash.ToHexString())
 	return nil
+}
+
+func (this *SyncService) waitForMainBlock() {
+	_, err := this.mainSdk.WaitForGenerateBlock(30*time.Second, 1)
+	if err != nil {
+		log.Errorf("waitForMainBlock error:%s", err)
+	}
+}
+
+func (this *SyncService) waitForSideBlock() {
+	_, err := this.sideSdk.WaitForGenerateBlock(30*time.Second, 1)
+	if err != nil {
+		log.Errorf("waitForSideBlock error:%s", err)
+	}
 }
 
 func ConcatKey(args ...[]byte) []byte {

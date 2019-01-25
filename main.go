@@ -19,11 +19,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
-	"runtime"
-	"syscall"
-
 	"github.com/ontio/crossChainClient/cmd"
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/config"
@@ -31,6 +26,8 @@ import (
 	"github.com/ontio/crossChainClient/service"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/urfave/cli"
+	"os"
+	"runtime"
 )
 
 func setupApp() *cli.App {
