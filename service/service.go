@@ -4,15 +4,17 @@ import (
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	sdk "github.com/ontio/ontology-go-sdk"
-	"github.com/ontio/ontology/smartcontract/service/native/side_chain"
-	"hash/fnv"
+	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
+	"os"
 )
 
 type SyncService struct {
-	account *sdk.Account
-	mainSdk *sdk.OntologySdk
-	sideSdk *sdk.OntologySdk
-	config  *config.Config
+	account        *sdk.Account
+	mainSdk        *sdk.OntologySdk
+	mainSyncHeight uint32
+	sideSdk        *sdk.OntologySdk
+	sideSyncHeight uint32
+	config         *config.Config
 }
 
 func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, sideSdk *sdk.OntologySdk) *SyncService {
@@ -26,43 +28,89 @@ func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, sideSdk *sdk.On
 }
 
 func (this *SyncService) Run() {
-	for {
-		//get current block header height of main chain
-		hash := fnv.New32a()
-		hash.Write([]byte(this.config.SideChainID))
-		mainHeight, err := this.getMainCurrentHeaderHeight(hash.Sum32())
-		if err != nil {
-			log.Errorf("this.getMainCurrentHeaderHeight error: %s", err)
-			return
-		}
+	go this.MainToSide()
+	go this.SideToMain()
+}
 
-		//get current block header height of side chain
-		sideHeight, err := this.sideSdk.GetCurrentBlockHeight()
-		if err != nil {
-			log.Errorf("this.sideSdk.GetCurrentBlockHeight error: %s", err)
-		}
-
-		gap := sideHeight - mainHeight
-		if gap > 0 {
-			log.Infof("main chain height is %d and side chain height is %d, begin to sync header", mainHeight, sideHeight)
-			//get header from side chain
-			param := new(side_chain.SyncBlockHeaderParam)
-			for i := mainHeight + 1; i <= sideHeight; i++ {
-				log.Infof("fetching block %d", i)
-				block, err := this.sideSdk.GetSideChainBlockByHeight(i)
-				if err != nil {
-					log.Errorf("this.sideSdk.GetSideChainBlockByHeight error: %s", err)
-				}
-				header := block.Header.ToArray()
-				param.Headers = append(param.Headers, header)
-			}
-			//sync block header
-			err = this.syncBlockHeaderToMain(param)
-			if err != nil {
-				log.Errorf("syncBlockHeaderToMain error: %s", err)
-			}
-			this.waitForMainBlock()
-		}
-		this.waitForSideBlock()
+func (this *SyncService) MainToSide() {
+	currentSideChainSyncHeight, err := this.GetCurrentSideChainSyncHeight(this.GetMainChainID())
+	if err != nil {
+		log.Errorf("[MainToSide] this.GetCurrentSideChainSyncHeight error:", err)
+		os.Exit(1)
 	}
+	this.sideSyncHeight = currentSideChainSyncHeight
+	for {
+		currentMainChainHeight, err := this.mainSdk.GetCurrentBlockHeight()
+		if err != nil {
+			log.Errorf("[MainToSide] this.mainSdk.GetCurrentBlockHeight error:", err)
+		}
+		for i := this.sideSyncHeight; i < currentMainChainHeight; i++ {
+			log.Infof("[MainToSide] start parse block %d", i)
+			events, err := this.mainSdk.GetSmartContractEventByBlock(i)
+			if err != nil {
+				log.Errorf("[MainToSide] this.mainSdk.GetSmartContractEventByBlock error:%s", err)
+				break
+			}
+			for _, event := range events {
+				for _, notify := range event.Notify {
+					states := notify.States.([]interface{})
+					name := states[0].(string)
+					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
+						requestID := uint64(states[2].(float64))
+						err = this.syncHeaderToSide(i)
+						if err != nil {
+							log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
+						}
+						err = this.sendProofToSide(requestID, i)
+						if err != nil {
+							log.Errorf("[MainToSide] this.sendProofToSide error:%s", err)
+						}
+					}
+				}
+			}
+			this.sideSyncHeight++
+		}
+	}
+}
+
+func (this *SyncService) SideToMain() {
+	currentMainChainSyncHeight, err := this.GetCurrentMainChainSyncHeight(this.GetSideChainID())
+	if err != nil {
+		log.Errorf("[SideToMain] this.GetCurrentMainChainSyncHeight error:", err)
+		os.Exit(1)
+	}
+	this.mainSyncHeight = currentMainChainSyncHeight
+	for {
+		currentSideChainHeight, err := this.sideSdk.GetCurrentBlockHeight()
+		if err != nil {
+			log.Errorf("[SideToMain] this.sideSdk.GetCurrentBlockHeight error:", err)
+		}
+		for i := this.mainSyncHeight; i < currentSideChainHeight; i++ {
+			log.Infof("[SideToMain] start parse block %d", i)
+			events, err := this.sideSdk.GetSmartContractEventByBlock(i)
+			if err != nil {
+				log.Errorf("[SideToMain] this.sideSdk.GetSmartContractEventByBlock error:%s", err)
+				break
+			}
+			for _, event := range events {
+				for _, notify := range event.Notify {
+					states := notify.States.([]interface{})
+					name := states[0].(string)
+					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
+						requestID := uint64(states[2].(float64))
+						err = this.syncHeaderToMain(i)
+						if err != nil {
+							log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
+						}
+						err = this.sendProofToMain(requestID, i)
+						if err != nil {
+							log.Errorf("[SideToMain] this.sendProofToMain error:%s", err)
+						}
+					}
+				}
+			}
+			this.mainSyncHeight++
+		}
+	}
+
 }

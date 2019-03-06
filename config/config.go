@@ -38,6 +38,7 @@ var DefConfig = NewConfig()
 type Config struct {
 	MainJsonRpcAddress string
 	SideJsonRpcAddress string
+	MainChainID        string
 	SideChainID        string
 	WalletFile         string
 	GasPrice           uint64

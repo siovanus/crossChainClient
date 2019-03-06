@@ -1,7 +1,8 @@
 {
   "MainJsonRpcAddress":"http://138.91.6.125:20336",
   "SideJsonRpcAddress":"http://138.91.6.125:30336",
-  "sideChainID": "sideChain",
+  "MainChainID": "mainChain",
+  "SideChainID": "sideChain",
   "WalletFile":"./wallet.dat",
   "GasPrice":0,
   "GasLimit":200000

@@ -43,3 +43,11 @@ func GetAccountByPassword(sdk *sdk.OntologySdk, path string) (*sdk.Account, bool
 	}
 	return user, true
 }
+
+func ConcatKey(args ...[]byte) []byte {
+	temp := []byte{}
+	for _, arg := range args {
+		temp = append(temp, arg...)
+	}
+	return temp
+}

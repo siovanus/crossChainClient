@@ -19,6 +19,11 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+
 	"github.com/ontio/crossChainClient/cmd"
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/config"
@@ -26,8 +31,6 @@ import (
 	"github.com/ontio/crossChainClient/service"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/urfave/cli"
-	"os"
-	"runtime"
 )
 
 func setupApp() *cli.App {
@@ -74,6 +77,22 @@ func startSync(ctx *cli.Context) {
 		return
 	}
 
-	dexService := service.NewSyncService(account, mainSdk, sideSdk)
-	dexService.Run()
+	syncService := service.NewSyncService(account, mainSdk, sideSdk)
+	syncService.Run()
+
+	waitToExit()
+}
+
+func waitToExit() {
+	exit := make(chan bool, 0)
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		for sig := range sc {
+			log.Infof("Ontology received exit signal:%v.", sig.String())
+			close(exit)
+			break
+		}
+	}()
+	<-exit
 }
