@@ -2,28 +2,23 @@ package service
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
-	"hash/fnv"
-	"time"
-	"github.com/ontio/crossChainClient/common"
 )
 
 var codeVersion = byte(0)
 
-func (this *SyncService) GetMainChainID() uint32 {
-	hash := fnv.New32a()
-	hash.Write([]byte(this.config.MainChainID))
-	return hash.Sum32()
+func (this *SyncService) GetMainChainID() uint64 {
+	return this.config.MainChainID
 }
 
-func (this *SyncService) GetSideChainID() uint32 {
-	hash := fnv.New32a()
-	hash.Write([]byte(this.config.SideChainID))
-	return hash.Sum32()
+func (this *SyncService) GetSideChainID() uint64 {
+	return this.config.SideChainID
 }
 
 func (this *SyncService) GetGasPrice() uint64 {
@@ -34,9 +29,9 @@ func (this *SyncService) GetGasLimit() uint64 {
 	return this.config.GasLimit
 }
 
-func (this *SyncService) GetCurrentSideChainSyncHeight(maiChainID uint32) (uint32, error) {
+func (this *SyncService) GetCurrentSideChainSyncHeight(maiChainID uint64) (uint32, error) {
 	contractAddress := utils.HeaderSyncContractAddress
-	maiChainIDBytes, err := utils.GetUint32Bytes(maiChainID)
+	maiChainIDBytes, err := utils.GetUint64Bytes(maiChainID)
 	if err != nil {
 		return 0, fmt.Errorf("GetUint32Bytes, get viewBytes error: %s", err)
 	}
@@ -52,9 +47,9 @@ func (this *SyncService) GetCurrentSideChainSyncHeight(maiChainID uint32) (uint3
 	return height, nil
 }
 
-func (this *SyncService) GetCurrentMainChainSyncHeight(sideChainID uint32) (uint32, error) {
+func (this *SyncService) GetCurrentMainChainSyncHeight(sideChainID uint64) (uint32, error) {
 	contractAddress := utils.HeaderSyncContractAddress
-	sideChainIDBytes, err := utils.GetUint32Bytes(sideChainID)
+	sideChainIDBytes, err := utils.GetUint64Bytes(sideChainID)
 	if err != nil {
 		return 0, fmt.Errorf("GetUint32Bytes, get viewBytes error: %s", err)
 	}
@@ -71,6 +66,19 @@ func (this *SyncService) GetCurrentMainChainSyncHeight(sideChainID uint32) (uint
 }
 
 func (this *SyncService) syncHeaderToMain(height uint32) error {
+	chainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
+	if err != nil {
+		return fmt.Errorf("[syncHeaderToMain] chainIDBytes, getUint32Bytes error: %v", err)
+	}
+	heightBytes, err := utils.GetUint32Bytes(height)
+	if err != nil {
+		return fmt.Errorf("[syncHeaderToMain] heightBytes, getUint32Bytes error: %v", err)
+	}
+	v, err := this.mainSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+		common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
+	if len(v) != 0 {
+		return nil
+	}
 	contractAddress := utils.HeaderSyncContractAddress
 	method := header_sync.SYNC_BLOCK_HEADER
 	block, err := this.sideSdk.GetBlockByHeight(height)
@@ -86,56 +94,46 @@ func (this *SyncService) syncHeaderToMain(height uint32) error {
 		return fmt.Errorf("[syncHeaderToMain] invokeNativeContract error: %s", err)
 	}
 	log.Infof("[syncHeaderToMain] syncHeaderToMain txHash is :", txHash.ToHexString())
+	this.waitForMainBlock()
 	return nil
 }
 
 func (this *SyncService) sendProofToMain(requestID uint64, height uint32) error {
 	//TODO: filter if tx is done
 
-	sideChainIDBytes, err := utils.GetUint32Bytes(this.GetSideChainID())
-	//if err != nil {
-	//	return fmt.Errorf("[sendProofToSide] GetUint32Bytes error:%s", err)
-	//}
-	prefix, err := utils.GetUint64Bytes(requestID)
-	//if err != nil {
-	//	return fmt.Errorf("[sendProofToSide] GetUint64Bytes error:%s", err)
-	//}
-	//key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
-	//mptProof, err := this.sideSdk.GetMptProof(key, height)
-	//if err != nil {
-	//	return fmt.Errorf("[sendProofToSide] this.sideSdk.GetMptProof error: %s", err)
-	//}
-	var proof [][]byte
-	//for _, v := range mptProof.MPTProof {
-	//	proof = append(proof, v)
-	//}
-
-	key := common.ConcatKey([]byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
-	value, err := this.sideSdk.GetStorage(utils.CrossChainContractAddress.ToHexString(), key)
+	sideChainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
 	if err != nil {
-		return fmt.Errorf("[sendProofToSide] this.sideSdk.GetStorage error: %s", err)
+		return fmt.Errorf("[sendProofToMain] GetUint32Bytes error:%s", err)
+	}
+	prefix, err := utils.GetUint64Bytes(requestID)
+	if err != nil {
+		return fmt.Errorf("[sendProofToMain] GetUint64Bytes error:%s", err)
+	}
+	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
+	crossStatesProof, err := this.sideSdk.GetCrossStatesProof(height, key)
+	if err != nil {
+		return fmt.Errorf("[sendProofToMain] this.sideSdk.GetCrossStatesProof error: %s", err)
 	}
 
 	contractAddress := utils.CrossChainContractAddress
 	method := cross_chain.PROCESS_CROSS_CHAIN_TX
 	param := &cross_chain.ProcessCrossChainTxParam{
-		SideChainID: this.GetMainChainID(),
-		ID:          requestID,
-		Height:      height,
-		Proof:       proof,
-		Value:       value,
+		Address:     this.account.Address,
+		FromChainID: this.GetSideChainID(),
+		Height:      height + 1,
+		Proof:       crossStatesProof.AuditPath,
 	}
 	txHash, err := this.mainSdk.Native.InvokeNativeContract(this.GetSideChainID(), this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
 		contractAddress, method, []interface{}{param})
 	if err != nil {
-		return fmt.Errorf("[sendProofToSide] invokeNativeContract error: %s", err)
+		return fmt.Errorf("[sendProofToMain] invokeNativeContract error: %s", err)
 	}
-	log.Infof("[sendProofToSide] sendProofToSide txHash is :", txHash.ToHexString())
+	log.Infof("[sendProofToMain] sendProofToSide txHash is :", txHash.ToHexString())
 	return nil
 }
 
 func (this *SyncService) syncHeaderToSide(height uint32) error {
-	chainIDBytes, err := utils.GetUint32Bytes(this.GetMainChainID())
+	chainIDBytes, err := utils.GetUint64Bytes(this.GetMainChainID())
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToSide] chainIDBytes, getUint32Bytes error: %v", err)
 	}
@@ -163,44 +161,34 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 		return fmt.Errorf("[syncHeaderToSide] invokeNativeContract error: %s", err)
 	}
 	log.Infof("[syncHeaderToSide] syncHeaderToSide txHash is :", txHash.ToHexString())
+	this.waitForSideBlock()
 	return nil
 }
 
 func (this *SyncService) sendProofToSide(requestID uint64, height uint32) error {
 	//TODO: filter if tx is done
 
-	sideChainIDBytes, err := utils.GetUint32Bytes(this.GetSideChainID())
-	//if err != nil {
-	//	return fmt.Errorf("[sendProofToSide] GetUint32Bytes error:%s", err)
-	//}
-	prefix, err := utils.GetUint64Bytes(requestID)
-	//if err != nil {
-	//	return fmt.Errorf("[sendProofToSide] GetUint64Bytes error:%s", err)
-	//}
-	//key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
-	//mptProof, err := this.mainSdk.GetMptProof(key, height)
-	//if err != nil {
-	//	return fmt.Errorf("[sendProofToSide] this.mainSdk.GetMptProof error: %s", err)
-	//}
-	var proof [][]byte
-	//for _, v := range mptProof.MPTProof {
-	//	proof = append(proof, v)
-	//}
-
-	key := common.ConcatKey([]byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
-	value, err := this.mainSdk.GetStorage(utils.CrossChainContractAddress.ToHexString(), key)
+	sideChainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
 	if err != nil {
-		return fmt.Errorf("[sendProofToSide] this.mainSdk.GetStorage error: %s", err)
+		return fmt.Errorf("[sendProofToSide] GetUint32Bytes error:%s", err)
+	}
+	prefix, err := utils.GetUint64Bytes(requestID)
+	if err != nil {
+		return fmt.Errorf("[sendProofToSide] GetUint64Bytes error:%s", err)
+	}
+	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
+	crossStatesProof, err := this.mainSdk.GetCrossStatesProof(height, key)
+	if err != nil {
+		return fmt.Errorf("[sendProofToSide] this.mainSdk.GetCrossStatesProof error: %s", err)
 	}
 
 	contractAddress := utils.CrossChainContractAddress
 	method := cross_chain.PROCESS_CROSS_CHAIN_TX
 	param := &cross_chain.ProcessCrossChainTxParam{
-		SideChainID: this.GetMainChainID(),
-		ID:          requestID,
-		Height:      height,
-		Proof:       proof,
-		Value:       value,
+		Address:     this.account.Address,
+		FromChainID: this.GetMainChainID(),
+		Height:      height + 1,
+		Proof:       crossStatesProof.AuditPath,
 	}
 	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetSideChainID(), this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
 		contractAddress, method, []interface{}{param})

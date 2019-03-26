@@ -1,11 +1,12 @@
 package service
 
 import (
+	"os"
+
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
-	"os"
 )
 
 type SyncService struct {
@@ -46,6 +47,8 @@ func (this *SyncService) MainToSide() {
 		}
 		for i := this.sideSyncHeight; i < currentMainChainHeight; i++ {
 			log.Infof("[MainToSide] start parse block %d", i)
+
+			//sync cross chain info
 			events, err := this.mainSdk.GetSmartContractEventByBlock(i)
 			if err != nil {
 				log.Errorf("[MainToSide] this.mainSdk.GetSmartContractEventByBlock error:%s", err)
@@ -57,7 +60,7 @@ func (this *SyncService) MainToSide() {
 					name := states[0].(string)
 					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
 						requestID := uint64(states[2].(float64))
-						err = this.syncHeaderToSide(i)
+						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
 							log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
 						}
@@ -87,6 +90,8 @@ func (this *SyncService) SideToMain() {
 		}
 		for i := this.mainSyncHeight; i < currentSideChainHeight; i++ {
 			log.Infof("[SideToMain] start parse block %d", i)
+
+			//sync cross chain info
 			events, err := this.sideSdk.GetSmartContractEventByBlock(i)
 			if err != nil {
 				log.Errorf("[SideToMain] this.sideSdk.GetSmartContractEventByBlock error:%s", err)
@@ -98,7 +103,7 @@ func (this *SyncService) SideToMain() {
 					name := states[0].(string)
 					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
 						requestID := uint64(states[2].(float64))
-						err = this.syncHeaderToMain(i)
+						err = this.syncHeaderToMain(i + 1)
 						if err != nil {
 							log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
 						}
