@@ -3,9 +3,11 @@ package service
 import (
 	"os"
 
+	"encoding/json"
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	sdk "github.com/ontio/ontology-go-sdk"
+	"github.com/ontio/ontology/consensus/vbft/config"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 )
 
@@ -47,6 +49,21 @@ func (this *SyncService) MainToSide() {
 		}
 		for i := this.sideSyncHeight; i < currentMainChainHeight; i++ {
 			log.Infof("[MainToSide] start parse block %d", i)
+			//sync key header
+			block, err := this.mainSdk.GetBlockByHeight(i)
+			if err != nil {
+				log.Errorf("[MainToSide] this.mainSdk.GetBlockByHeight error:", err)
+			}
+			blkInfo := &vconfig.VbftBlockInfo{}
+			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
+				log.Errorf("[MainToSide] unmarshal blockInfo error: %s", err)
+			}
+			if blkInfo.NewChainConfig != nil {
+				err = this.syncHeaderToSide(i)
+				if err != nil {
+					log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
+				}
+			}
 
 			//sync cross chain info
 			events, err := this.mainSdk.GetSmartContractEventByBlock(i)
@@ -90,6 +107,21 @@ func (this *SyncService) SideToMain() {
 		}
 		for i := this.mainSyncHeight; i < currentSideChainHeight; i++ {
 			log.Infof("[SideToMain] start parse block %d", i)
+			//sync key header
+			block, err := this.sideSdk.GetBlockByHeight(i)
+			if err != nil {
+				log.Errorf("[SideToMain] this.mainSdk.GetBlockByHeight error:", err)
+			}
+			blkInfo := &vconfig.VbftBlockInfo{}
+			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
+				log.Errorf("[SideToMain] unmarshal blockInfo error: %s", err)
+			}
+			if blkInfo.NewChainConfig != nil {
+				err = this.syncHeaderToMain(i)
+				if err != nil {
+					log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
+				}
+			}
 
 			//sync cross chain info
 			events, err := this.sideSdk.GetSmartContractEventByBlock(i)
