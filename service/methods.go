@@ -101,7 +101,7 @@ func (this *SyncService) syncHeaderToMain(height uint32) error {
 func (this *SyncService) sendProofToMain(requestID uint64, height uint32) error {
 	//TODO: filter if tx is done
 
-	sideChainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
+	chainIDBytes, err := utils.GetUint64Bytes(this.GetMainChainID())
 	if err != nil {
 		return fmt.Errorf("[sendProofToMain] GetUint32Bytes error:%s", err)
 	}
@@ -109,7 +109,7 @@ func (this *SyncService) sendProofToMain(requestID uint64, height uint32) error 
 	if err != nil {
 		return fmt.Errorf("[sendProofToMain] GetUint64Bytes error:%s", err)
 	}
-	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
+	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), chainIDBytes, prefix)
 	crossStatesProof, err := this.sideSdk.GetCrossStatesProof(height, key)
 	if err != nil {
 		return fmt.Errorf("[sendProofToMain] this.sideSdk.GetCrossStatesProof error: %s", err)
@@ -128,7 +128,7 @@ func (this *SyncService) sendProofToMain(requestID uint64, height uint32) error 
 	if err != nil {
 		return fmt.Errorf("[sendProofToMain] invokeNativeContract error: %s", err)
 	}
-	log.Infof("[sendProofToMain] sendProofToSide txHash is :", txHash.ToHexString())
+	log.Infof("[sendProofToMain] sendProofToMain txHash is :", txHash.ToHexString())
 	return nil
 }
 
@@ -168,7 +168,7 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 func (this *SyncService) sendProofToSide(requestID uint64, height uint32) error {
 	//TODO: filter if tx is done
 
-	sideChainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
+	chainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
 	if err != nil {
 		return fmt.Errorf("[sendProofToSide] GetUint32Bytes error:%s", err)
 	}
@@ -176,7 +176,7 @@ func (this *SyncService) sendProofToSide(requestID uint64, height uint32) error 
 	if err != nil {
 		return fmt.Errorf("[sendProofToSide] GetUint64Bytes error:%s", err)
 	}
-	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), sideChainIDBytes, prefix)
+	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(cross_chain.REQUEST), chainIDBytes, prefix)
 	crossStatesProof, err := this.mainSdk.GetCrossStatesProof(height, key)
 	if err != nil {
 		return fmt.Errorf("[sendProofToSide] this.mainSdk.GetCrossStatesProof error: %s", err)
