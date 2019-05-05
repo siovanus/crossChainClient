@@ -73,7 +73,10 @@ func (this *SyncService) MainToSide() {
 			}
 			for _, event := range events {
 				for _, notify := range event.Notify {
-					states := notify.States.([]interface{})
+					states, ok := notify.States.([]interface{})
+					if !ok {
+						continue
+					}
 					name := states[0].(string)
 					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
 						requestID := uint64(states[2].(float64))
@@ -131,7 +134,10 @@ func (this *SyncService) SideToMain() {
 			}
 			for _, event := range events {
 				for _, notify := range event.Notify {
-					states := notify.States.([]interface{})
+					states, ok := notify.States.([]interface{})
+					if !ok {
+						continue
+					}
 					name := states[0].(string)
 					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
 						requestID := uint64(states[2].(float64))

@@ -35,7 +35,7 @@ import (
 
 func setupApp() *cli.App {
 	app := cli.NewApp()
-	app.Usage = "ONTDEX CLI"
+	app.Usage = "Relayer cli"
 	app.Action = startSync
 	app.Copyright = "Copyright in 2018 The Ontology Authors"
 	app.Flags = []cli.Flag{
