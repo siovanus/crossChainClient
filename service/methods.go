@@ -95,6 +95,7 @@ func (this *SyncService) syncHeaderToMain(height uint32) error {
 	}
 	log.Infof("[syncHeaderToMain] syncHeaderToMain txHash is :", txHash.ToHexString())
 	this.waitForMainBlock()
+	this.waitForSideBlock()
 	return nil
 }
 
@@ -161,6 +162,7 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 		return fmt.Errorf("[syncHeaderToSide] invokeNativeContract error: %s", err)
 	}
 	log.Infof("[syncHeaderToSide] syncHeaderToSide txHash is :", txHash.ToHexString())
+	this.waitForSideBlock()
 	this.waitForSideBlock()
 	return nil
 }
