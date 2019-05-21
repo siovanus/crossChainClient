@@ -9,66 +9,79 @@ import (
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/consensus/vbft/config"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
+	"sync"
 )
 
 type SyncService struct {
-	account        *sdk.Account
-	mainSdk        *sdk.OntologySdk
-	mainSyncHeight uint32
-	sideSdk        *sdk.OntologySdk
-	sideSyncHeight uint32
-	config         *config.Config
+	sync.RWMutex
+	account      *sdk.Account
+	mainSdk      *sdk.OntologySdk
+	syncHeight   uint32
+	sideChainMap map[uint64]*SideChain
+	config       *config.Config
 }
 
-func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, sideSdk *sdk.OntologySdk) *SyncService {
+type SideChain struct {
+	sdk        *sdk.OntologySdk
+	syncHeight uint32
+}
+
+func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, config *config.Config) *SyncService {
 	syncSvr := &SyncService{
 		account: acct,
 		mainSdk: mainSdk,
-		sideSdk: sideSdk,
-		config:  config.DefConfig,
+		config:  config,
 	}
+	sideChainMap := make(map[uint64]*SideChain)
+	for rpcAddress, chainID := range config.SideChainMap {
+		sdk := sdk.NewOntologySdk()
+		sdk.NewRpcClient().SetAddress(rpcAddress)
+		sideChainMap[chainID] = &SideChain{
+			sdk: sdk,
+		}
+	}
+	syncSvr.sideChainMap = sideChainMap
 	return syncSvr
 }
 
 func (this *SyncService) Run() {
-	go this.MainToSide()
-	go this.SideToMain()
+	go this.MainMonitor()
+	for chainID := range this.sideChainMap {
+		go this.SideMonitor(chainID)
+	}
 }
 
-func (this *SyncService) MainToSide() {
-	currentSideChainSyncHeight, err := this.GetCurrentSideChainSyncHeight(this.GetMainChainID())
+func (this *SyncService) MainMonitor() {
+	mainChainHeight, err := this.mainSdk.GetCurrentBlockHeight()
 	if err != nil {
-		log.Errorf("[MainToSide] this.GetCurrentSideChainSyncHeight error:", err)
-		os.Exit(1)
+		log.Errorf("[MainMonitor] this.mainSdk.GetCurrentBlockHeight error:", err)
 	}
-	this.sideSyncHeight = currentSideChainSyncHeight
+	this.syncHeight = mainChainHeight
+
 	for {
 		currentMainChainHeight, err := this.mainSdk.GetCurrentBlockHeight()
 		if err != nil {
-			log.Errorf("[MainToSide] this.mainSdk.GetCurrentBlockHeight error:", err)
+			log.Errorf("[MainMonitor] this.mainSdk.GetCurrentBlockHeight error:", err)
 		}
-		for i := this.sideSyncHeight; i < currentMainChainHeight; i++ {
-			log.Infof("[MainToSide] start parse block %d", i)
+		for i := this.syncHeight; i < currentMainChainHeight; i++ {
+			log.Infof("[MainMonitor] start parse block %d", i)
 			//sync key header
 			block, err := this.mainSdk.GetBlockByHeight(i)
 			if err != nil {
-				log.Errorf("[MainToSide] this.mainSdk.GetBlockByHeight error:", err)
+				log.Errorf("[MainMonitor] this.mainSdk.GetBlockByHeight error:", err)
 			}
 			blkInfo := &vconfig.VbftBlockInfo{}
 			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
-				log.Errorf("[MainToSide] unmarshal blockInfo error: %s", err)
+				log.Errorf("[MainMonitor] unmarshal blockInfo error: %s", err)
 			}
 			if blkInfo.NewChainConfig != nil {
-				err = this.syncHeaderToSide(i)
-				if err != nil {
-					log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
-				}
+				this.syncMainHeader(block)
 			}
 
 			//sync cross chain info
 			events, err := this.mainSdk.GetSmartContractEventByBlock(i)
 			if err != nil {
-				log.Errorf("[MainToSide] this.mainSdk.GetSmartContractEventByBlock error:%s", err)
+				log.Errorf("[MainMonitor] this.mainSdk.GetSmartContractEventByBlock error:%s", err)
 				break
 			}
 			for _, event := range events {
@@ -79,57 +92,58 @@ func (this *SyncService) MainToSide() {
 					}
 					name := states[0].(string)
 					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
+						toChainID := uint64(states[1].(float64))
 						requestID := uint64(states[2].(float64))
-						err = this.syncHeaderToSide(i + 1)
+						block, err := this.mainSdk.GetBlockByHeight(i + 1)
 						if err != nil {
-							log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
+							log.Errorf("[MainMonitor] this.mainSdk.GetBlockByHeight error:%s", err)
 						}
-						err = this.sendProofToSide(requestID, i)
+						this.syncHeaderToSide(toChainID, block.Header)
+						err = this.sendMainProofToSide(toChainID, requestID, i)
 						if err != nil {
-							log.Errorf("[MainToSide] this.sendProofToSide error:%s", err)
+							log.Errorf("[MainMonitor] this.sendProofToSide error:%s", err)
 						}
 					}
 				}
 			}
-			this.sideSyncHeight++
+			this.syncHeight++
 		}
 	}
 }
 
-func (this *SyncService) SideToMain() {
-	currentMainChainSyncHeight, err := this.GetCurrentMainChainSyncHeight(this.GetSideChainID())
+func (this *SyncService) SideMonitor(chainID uint64) {
+	sideChainHeight, err := this.getSideSdk(chainID).GetCurrentBlockHeight()
 	if err != nil {
-		log.Errorf("[SideToMain] this.GetCurrentMainChainSyncHeight error:", err)
+		log.Errorf("[SideMonitor] side chain %d, this.GetCurrentMainChainSyncHeight error:%s", chainID, err)
 		os.Exit(1)
 	}
-	this.mainSyncHeight = currentMainChainSyncHeight
+	this.Lock()
+	this.sideChainMap[chainID].syncHeight = sideChainHeight
+	this.Unlock()
 	for {
-		currentSideChainHeight, err := this.sideSdk.GetCurrentBlockHeight()
+		currentSideChainHeight, err := this.getSideSdk(chainID).GetCurrentBlockHeight()
 		if err != nil {
-			log.Errorf("[SideToMain] this.sideSdk.GetCurrentBlockHeight error:", err)
+			log.Errorf("[SideMonitor] side chain %d, this.sideSdk.GetCurrentBlockHeight error:", chainID, err)
 		}
-		for i := this.mainSyncHeight; i < currentSideChainHeight; i++ {
-			log.Infof("[SideToMain] start parse block %d", i)
+		for i := this.getSideSyncHeight(chainID); i < currentSideChainHeight; i++ {
+			log.Infof("[SideMonitor] side chain %d, start parse block %d", i)
 			//sync key header
-			block, err := this.sideSdk.GetBlockByHeight(i)
+			block, err := this.getSideSdk(chainID).GetBlockByHeight(i)
 			if err != nil {
-				log.Errorf("[SideToMain] this.mainSdk.GetBlockByHeight error:", err)
+				log.Errorf("[SideMonitor] side chain %d, this.getSideSdk(chainID).GetBlockByHeight error:", chainID, err)
 			}
 			blkInfo := &vconfig.VbftBlockInfo{}
 			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
-				log.Errorf("[SideToMain] unmarshal blockInfo error: %s", err)
+				log.Errorf("[SideMonitor] side chain %d, unmarshal blockInfo error: %s", chainID, err)
 			}
 			if blkInfo.NewChainConfig != nil {
-				err = this.syncHeaderToMain(i)
-				if err != nil {
-					log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
-				}
+				this.syncHeaderToMain(chainID, block.Header)
 			}
 
 			//sync cross chain info
-			events, err := this.sideSdk.GetSmartContractEventByBlock(i)
+			events, err := this.getSideSdk(chainID).GetSmartContractEventByBlock(i)
 			if err != nil {
-				log.Errorf("[SideToMain] this.sideSdk.GetSmartContractEventByBlock error:%s", err)
+				log.Errorf("[SideMonitor] side chain %d, this.sideSdk.GetSmartContractEventByBlock error:%s", chainID, err)
 				break
 			}
 			for _, event := range events {
@@ -140,20 +154,34 @@ func (this *SyncService) SideToMain() {
 					}
 					name := states[0].(string)
 					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
+						toChainID := uint64(states[1].(float64))
 						requestID := uint64(states[2].(float64))
-						err = this.syncHeaderToMain(i + 1)
+						block, err := this.getSideSdk(chainID).GetBlockByHeight(i + 1)
 						if err != nil {
-							log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
+							log.Errorf("[SideMonitor] side chain %d, this.getSideSdk(chainID).GetBlockByHeight error:%s",
+								chainID, err)
 						}
-						err = this.sendProofToMain(requestID, i)
-						if err != nil {
-							log.Errorf("[SideToMain] this.sendProofToMain error:%s", err)
+						if toChainID == 0 {
+							this.syncHeaderToMain(toChainID, block.Header)
+							err = this.sendSideProofToMain(toChainID, requestID, i)
+							if err != nil {
+								log.Errorf("[SideMonitor] side chain %d, this.sendProofToMain error:%s", chainID, err)
+							}
+						} else {
+							//TODO
+							this.syncHeaderToSide(toChainID, block.Header)
+							err = this.sendSideProofToSide(chainID, toChainID, requestID, i)
+							if err != nil {
+								log.Errorf("[SideMonitor] side chain %d to side chain %d, this.sendSideProofToSide error:%s",
+									chainID, toChainID, err)
+							}
 						}
 					}
 				}
 			}
-			this.mainSyncHeight++
+			this.Lock()
+			this.sideChainMap[chainID].syncHeight++
+			this.Unlock()
 		}
 	}
-
 }

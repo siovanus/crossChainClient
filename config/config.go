@@ -37,15 +37,14 @@ var DefConfig = NewConfig()
 //Config object used by ontology-instance
 type Config struct {
 	MainJsonRpcAddress string
-	SideJsonRpcAddress string
 	MainChainID        uint64
-	SideChainID        uint64
+	SideChainMap       map[string]uint64
 	WalletFile         string
 	GasPrice           uint64
 	GasLimit           uint64
 }
 
-//NewConfig retuen a TestConfig instance
+//NewConfig return a Config instance
 func NewConfig() *Config {
 	return &Config{}
 }
