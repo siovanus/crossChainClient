@@ -3,7 +3,7 @@
   "MainChainID": 0,
   "SideChainMap": {
     "http://138.91.6.125:30336": 1,
-    "http://138.91.6.125:40336": 2,
+    "http://138.91.6.125:40336": 2
   },
   "WalletFile":"./wallet.dat",
   "GasPrice":0,

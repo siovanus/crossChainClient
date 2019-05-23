@@ -2,35 +2,22 @@ package service
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
-	sdk "github.com/ontio/ontology-go-sdk"
+	ocommon "github.com/ontio/ontology/common"
+	cstates "github.com/ontio/ontology/core/states"
 	"github.com/ontio/ontology/core/types"
+	"github.com/ontio/ontology/smartcontract/service/native/chain_manager"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
 
-var codeVersion = byte(0)
-
-func (this *SyncService) GetMainChain() uint64 {
-	return this.config.MainChainID
-}
-
-func (this *SyncService) GetGasPrice() uint64 {
-	return this.config.GasPrice
-}
-
-func (this *SyncService) GetGasLimit() uint64 {
-	return this.config.GasLimit
-}
-
 func (this *SyncService) syncHeaderToMain(chainID uint64, header *types.Header) {
 	chainIDBytes, err := utils.GetUint64Bytes(header.ShardID)
 	if err != nil {
-		log.Errorf("[syncSideKeyHeaderToMain] side chain %d, getUint32Bytes error: %s", chainID, err)
+		log.Errorf("[syncSideKeyHeaderToMain] side chain %d, GetUint64Bytes error: %s", chainID, err)
 		return
 	}
 	heightBytes, err := utils.GetUint32Bytes(header.Height)
@@ -68,7 +55,7 @@ func (this *SyncService) sendSideProofToMain(chainID uint64, requestID uint64, h
 
 	chainIDBytes, err := utils.GetUint64Bytes(this.GetMainChain())
 	if err != nil {
-		return fmt.Errorf("[sendSideProofToMain] side chain %d, GetUint32Bytes error:%s", chainID, err)
+		return fmt.Errorf("[sendSideProofToMain] side chain %d, GetUint64Bytes error:%s", chainID, err)
 	}
 	prefix, err := utils.GetUint64Bytes(requestID)
 	if err != nil {
@@ -103,7 +90,7 @@ func (this *SyncService) sendSideProofToSide(fromChainID, toChainID uint64, requ
 
 	chainIDBytes, err := utils.GetUint64Bytes(toChainID)
 	if err != nil {
-		return fmt.Errorf("[sendSideProofToSide] side chain %d to side chain %d, GetUint32Bytes error:%s",
+		return fmt.Errorf("[sendSideProofToSide] side chain %d to side chain %d, GetUint64Bytes error:%s",
 			fromChainID, toChainID, err)
 	}
 	prefix, err := utils.GetUint64Bytes(requestID)
@@ -146,7 +133,7 @@ func (this *SyncService) syncMainHeader(block *types.Block) {
 func (this *SyncService) syncHeaderToSide(chainID uint64, header *types.Header) {
 	chainIDBytes, err := utils.GetUint64Bytes(header.ShardID)
 	if err != nil {
-		log.Errorf("[syncMainKeyHeaderToSide] side chain %d, getUint32Bytes error: %s", chainID, err)
+		log.Errorf("[syncMainKeyHeaderToSide] side chain %d, GetUint64Bytes error: %s", chainID, err)
 		return
 	}
 	heightBytes, err := utils.GetUint32Bytes(header.Height)
@@ -184,7 +171,7 @@ func (this *SyncService) sendMainProofToSide(chainID uint64, requestID uint64, h
 
 	chainIDBytes, err := utils.GetUint64Bytes(chainID)
 	if err != nil {
-		return fmt.Errorf("[sendMainProofToSide] main chain to side chain %d, GetUint32Bytes error:%s", chainID, err)
+		return fmt.Errorf("[sendMainProofToSide] main chain to side chain %d, GetUint64Bytes error:%s", chainID, err)
 	}
 	prefix, err := utils.GetUint64Bytes(requestID)
 	if err != nil {
@@ -213,60 +200,199 @@ func (this *SyncService) sendMainProofToSide(chainID uint64, requestID uint64, h
 	return nil
 }
 
-func (this *SyncService) getSideSdk(chainID uint64) *sdk.OntologySdk {
-	this.Lock()
-	defer this.Unlock()
-	return this.sideChainMap[chainID].sdk
-}
-
-func (this *SyncService) getSideSyncHeight(chainID uint64) uint32 {
-	this.Lock()
-	defer this.Unlock()
-	return this.sideChainMap[chainID].syncHeight
-}
-
-func (this *SyncService) getSideChainMap() map[uint64]*SideChain {
-	this.Lock()
-	defer this.Unlock()
-	return this.sideChainMap
-}
-
-func (this *SyncService) waitForMainHeaderSync(chainID uint64, heightBytes []byte) {
+func (this *SyncService) getSideGovernanceEpoch(chainID uint64) (*chain_manager.GovernanceEpoch, error) {
 	chainIDBytes, err := utils.GetUint64Bytes(chainID)
 	if err != nil {
-		log.Errorf("[waitForHeaderSync] side chain %d, utils.GetUint64Bytes error: %s", chainID, err)
-		return
+		return nil, fmt.Errorf("[getSideGovernanceEpoch] getUint64Bytes error: %v", err)
 	}
-	for i := 0; i < 60; i++ {
-		time.Sleep(time.Second)
-		v, err := this.mainSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
-			common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
+	governanceEpochStore, err := this.mainSdk.GetStorage(utils.ChainManagerContractAddress.ToHexString(),
+		common.ConcatKey([]byte(chain_manager.GOVERNANCE_EPOCH), chainIDBytes))
+	if err != nil {
+		return nil, fmt.Errorf("[getSideGovernanceEpoch] get governanceEpochStore error: %v", err)
+	}
+	governanceEpoch := &chain_manager.GovernanceEpoch{
+		ChainID: chainID,
+		Epoch:   120000,
+	}
+	if governanceEpochStore != nil {
+		stakeInfoBytes, err := cstates.GetValueFromRawStorageItem(governanceEpochStore)
 		if err != nil {
-			log.Errorf("[waitForHeaderSync] side chain %d, sdk.GetStorage error: %s", chainID, err)
-			return
+			return nil, fmt.Errorf("[getSideGovernanceEpoch] deserialize from raw storage item err:%v", err)
 		}
-		if len(v) != 0 {
-			return
+		if err := governanceEpoch.Deserialization(ocommon.NewZeroCopySource(stakeInfoBytes)); err != nil {
+			return nil, fmt.Errorf("[getSideGovernanceEpoch] deserialize governanceEpoch error: %v", err)
 		}
+	}
+	return governanceEpoch, nil
+}
+
+func (this *SyncService) getSideKeyHeightsFromMain(chainID uint64) (*header_sync.KeyHeights, error) {
+	chainIDBytes, err := utils.GetUint64Bytes(chainID)
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromMain] GetUint64Bytes error:%s", err)
+	}
+	value, err := this.mainSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+		common.ConcatKey([]byte(header_sync.KEY_HEIGHTS), chainIDBytes))
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromMain] sdk.GetStorage error: %s", err)
+	}
+	keyHeights := &header_sync.KeyHeights{
+		HeightList: make([]uint32, 0),
+	}
+	if value == nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromMain] key heights is empty")
+	}
+	keyHeightsBytes, err := cstates.GetValueFromRawStorageItem(value)
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromMain] deserialize from raw storage item err:%s", err)
+	}
+	err = keyHeights.Deserialization(ocommon.NewZeroCopySource(keyHeightsBytes))
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromMain] deserialize keyHeights err:%s", err)
+	}
+	return keyHeights, nil
+}
+
+func (this *SyncService) getSideKeyHeightsFromSide(fromChainID, toChainID uint64) (*header_sync.KeyHeights, error) {
+	chainIDBytes, err := utils.GetUint64Bytes(toChainID)
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] GetUint64Bytes error:%s", err)
+	}
+	value, err := this.getSideSdk(fromChainID).GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+		common.ConcatKey([]byte(header_sync.KEY_HEIGHTS), chainIDBytes))
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] sdk.GetStorage error: %s", err)
+	}
+	keyHeights := &header_sync.KeyHeights{
+		HeightList: make([]uint32, 0),
+	}
+	if value == nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] key heights is empty")
+	}
+	keyHeightsBytes, err := cstates.GetValueFromRawStorageItem(value)
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] deserialize from raw storage item err:%s", err)
+	}
+	err = keyHeights.Deserialization(ocommon.NewZeroCopySource(keyHeightsBytes))
+	if err != nil {
+		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] deserialize keyHeights err:%s", err)
+	}
+	return keyHeights, nil
+}
+
+func (this *SyncService) getMerkleHeight(chainID uint64, keyHeight uint32) (uint32, error) {
+	chainIDBytes, err := utils.GetUint64Bytes(chainID)
+	if err != nil {
+		return 0, fmt.Errorf("[getMerkleHeight] getUint64Bytes error: %v", err)
+	}
+	heightBytes, err := utils.GetUint32Bytes(keyHeight)
+	if err != nil {
+		return 0, fmt.Errorf("[getMerkleHeight] getUint32Bytes error: %v", err)
+	}
+	merkleHeightStore, err := this.mainSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+		common.ConcatKey([]byte(header_sync.CONSENSUS_PEER_BLOCK_HEIGHT), chainIDBytes, heightBytes))
+	if err != nil {
+		return 0, fmt.Errorf("[getMerkleHeight] get merkleHeightStore error: %v", err)
+	}
+	if merkleHeightStore == nil {
+		return 0, fmt.Errorf("[getMerkleHeight] merkleHeightStore is nil")
+	}
+	merkleHeightBytes, err := cstates.GetValueFromRawStorageItem(merkleHeightStore)
+	if err != nil {
+		return 0, fmt.Errorf("[getMerkleHeight] deserialize from raw storage item err:%v", err)
+	}
+	merkleHeight, err := utils.GetBytesUint32(merkleHeightBytes)
+	if err != nil {
+		return 0, fmt.Errorf("[getMerkleHeight] utils.GetBytesUint32 err:%v", err)
+	}
+	return merkleHeight, nil
+}
+
+func (this *SyncService) syncConsensusPeersToSide(fromChainID, toChainID uint64, merkleHeight uint32) error {
+	block, err := this.mainSdk.GetBlockByHeight(merkleHeight + 1)
+	if err != nil {
+		log.Errorf("[syncConsensusPeersToSide] this.mainSdk.GetBlockByHeight %d error:%s", merkleHeight+1, err)
+	}
+	chainIDBytes, err := utils.GetUint64Bytes(fromChainID)
+	if err != nil {
+		return fmt.Errorf("[syncConsensusPeersToSide] GetUint64Bytes error:%s", err)
+	}
+	heightBytes, err := utils.GetUint32Bytes(merkleHeight)
+	if err != nil {
+		return fmt.Errorf("[syncConsensusPeersToSide] getUint32Bytes error: %v", err)
+	}
+	key := utils.ConcatKey(utils.CrossChainContractAddress, []byte(header_sync.CONSENSUS_PEER), chainIDBytes, heightBytes)
+	crossStatesProof, err := this.mainSdk.GetCrossStatesProof(merkleHeight, key)
+	if err != nil {
+		return fmt.Errorf("[syncConsensusPeersToSide] this.mainSdk.GetCrossStatesProof error: %s", err)
+	}
+
+	contractAddress := utils.HeaderSyncContractAddress
+	method := header_sync.SYNC_CONSENSUS_PEERS
+	param := &header_sync.SyncConsensusPeerParam{
+		Header: block.Header.ToArray(),
+		Proof:  crossStatesProof.AuditPath,
+	}
+	txHash, err := this.getSideSdk(toChainID).Native.InvokeNativeContract(toChainID, this.GetGasPrice(),
+		this.GetGasLimit(), this.account, codeVersion, contractAddress, method, []interface{}{param})
+	if err != nil {
+		return fmt.Errorf("[syncConsensusPeersToSide] invokeNativeContract error: %s", err)
+	}
+	log.Infof("[syncConsensusPeersToSide] sendProofToSide txHash is :%s", txHash.ToHexString())
+	return nil
+}
+
+func (this *SyncService) checkConsensusPeers(fromChainID, toChainID uint64, height uint32) (bool, error) {
+	keyHeights, err := this.getSideKeyHeightsFromSide(fromChainID, toChainID)
+	if err != nil {
+		return false, fmt.Errorf("[checkConsensusPeers] this.getSideKeyHeights error:%s", err)
+	}
+	var keyHeight uint32
+	for _, v := range keyHeights.HeightList {
+		if (height - v) > 0 {
+			keyHeight = v
+		}
+	}
+	governanceEpoch, err := this.getSideGovernanceEpoch(fromChainID)
+	if err != nil {
+		return false, fmt.Errorf("[checkConsensusPeers] this.getSideGovernanceEpoch error:%s", err)
+	}
+	if height-keyHeight > governanceEpoch.Epoch || len(keyHeights.HeightList) == 0 {
+		log.Infof("[checkConsensusPeers] check false")
+		return false, nil
+	} else {
+		log.Infof("[checkConsensusPeers] check true")
+		return true, nil
 	}
 }
 
-func (this *SyncService) waitForSideHeaderSync(chainID uint64, heightBytes []byte) {
-	chainIDBytes, err := utils.GetUint64Bytes(chainID)
+func (this *SyncService) syncConsensusPeersFromSideToSide(fromChainID, toChainID uint64, height uint32) error {
+	keyHeights, err := this.getSideKeyHeightsFromMain(fromChainID)
 	if err != nil {
-		log.Errorf("[waitForHeaderSync] side chain %d, utils.GetUint64Bytes error: %s", chainID, err)
-		return
+		log.Errorf("[syncConsensusPeersFromSideToSide] this.getSideKeyHeights error:%s", err)
 	}
-	for i := 0; i < 60; i++ {
-		time.Sleep(time.Second)
-		v, err := this.sideChainMap[chainID].sdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
-			common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
-		if err != nil {
-			log.Errorf("[waitForHeaderSync] side chain %d, sdk.GetStorage error: %s", chainID, err)
-			return
-		}
-		if len(v) != 0 {
-			return
+	var keyHeight uint32
+	for _, v := range keyHeights.HeightList {
+		if (height - v) > 0 {
+			keyHeight = v
 		}
 	}
+	governanceEpoch, err := this.getSideGovernanceEpoch(fromChainID)
+	if err != nil {
+		log.Errorf("[syncConsensusPeersFromSideToSide] this.getSideGovernanceEpoch error:%s", err)
+	}
+	if height-keyHeight > governanceEpoch.Epoch {
+		log.Errorf("[syncConsensusPeersFromSideToSide] some key height is missing in main chain")
+	}
+	//get merkle height according to key height
+	merkleHeight, err := this.getMerkleHeight(fromChainID, keyHeight)
+	if err != nil {
+		log.Errorf("[syncConsensusPeersFromSideToSide] this.getMerkleHeight error: %s", err)
+	}
+	//sync main header of merkle height and merkle proof to destination side chain
+	err = this.syncConsensusPeersToSide(fromChainID, toChainID, merkleHeight)
+	if err != nil {
+		log.Errorf("[syncConsensusPeersFromSideToSide] this.syncHeaderAndProofToSide error: %s", err)
+	}
+	return nil
 }

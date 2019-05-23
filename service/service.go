@@ -1,15 +1,15 @@
 package service
 
 import (
-	"os"
-
 	"encoding/json"
+	"os"
+	"sync"
+
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/consensus/vbft/config"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
-	"sync"
 )
 
 type SyncService struct {
@@ -126,7 +126,7 @@ func (this *SyncService) SideMonitor(chainID uint64) {
 			log.Errorf("[SideMonitor] side chain %d, this.sideSdk.GetCurrentBlockHeight error:", chainID, err)
 		}
 		for i := this.getSideSyncHeight(chainID); i < currentSideChainHeight; i++ {
-			log.Infof("[SideMonitor] side chain %d, start parse block %d", i)
+			log.Infof("[SideMonitor] side chain %d, start parse block %d", chainID, i)
 			//sync key header
 			block, err := this.getSideSdk(chainID).GetBlockByHeight(i)
 			if err != nil {
@@ -158,17 +158,28 @@ func (this *SyncService) SideMonitor(chainID uint64) {
 						requestID := uint64(states[2].(float64))
 						block, err := this.getSideSdk(chainID).GetBlockByHeight(i + 1)
 						if err != nil {
-							log.Errorf("[SideMonitor] side chain %d, this.getSideSdk(chainID).GetBlockByHeight error:%s",
+							log.Errorf("[SideMonitor] side chain %d to main chain, this.getSideSdk(chainID).GetBlockByHeight error:%s",
 								chainID, err)
 						}
 						if toChainID == 0 {
 							this.syncHeaderToMain(toChainID, block.Header)
 							err = this.sendSideProofToMain(toChainID, requestID, i)
 							if err != nil {
-								log.Errorf("[SideMonitor] side chain %d, this.sendProofToMain error:%s", chainID, err)
+								log.Errorf("[SideMonitor] side chain %d to main chain, this.sendProofToMain error:%s", chainID, err)
 							}
 						} else {
-							//TODO
+							ok, err := this.checkConsensusPeers(chainID, toChainID, i)
+							if err != nil {
+								log.Errorf("[SideMonitor] side chain %d to side chain %d, this.checkConsensusPeers error:%s",
+									chainID, toChainID, err)
+							}
+							if !ok {
+								err = this.syncConsensusPeersFromSideToSide(chainID, toChainID, i)
+								if err != nil {
+									log.Errorf("[SideMonitor] side chain %d to side chain %d, this.sendSideProofToSide error:%s",
+										chainID, toChainID, err)
+								}
+							}
 							this.syncHeaderToSide(toChainID, block.Header)
 							err = this.sendSideProofToSide(chainID, toChainID, requestID, i)
 							if err != nil {
