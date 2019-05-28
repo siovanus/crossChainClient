@@ -45,7 +45,7 @@ func (this *SyncService) getSideChainMap() map[uint64]*SideChain {
 func (this *SyncService) waitForMainHeaderSync(chainID uint64, heightBytes []byte) {
 	chainIDBytes, err := utils.GetUint64Bytes(chainID)
 	if err != nil {
-		log.Errorf("[waitForHeaderSync] side chain %d, utils.GetUint64Bytes error: %s", chainID, err)
+		log.Errorf("[waitForMainHeaderSync] side chain %d header to main chain, utils.GetUint64Bytes error: %s", chainID, err)
 		return
 	}
 	for i := 0; i < 60; i++ {
@@ -53,31 +53,33 @@ func (this *SyncService) waitForMainHeaderSync(chainID uint64, heightBytes []byt
 		v, err := this.mainSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
 			common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
 		if err != nil {
-			log.Errorf("[waitForHeaderSync] side chain %d, sdk.GetStorage error: %s", chainID, err)
+			log.Errorf("[waitForMainHeaderSync] side chain %d header to main chain, sdk.GetStorage error: %s", chainID, err)
 			return
 		}
 		if len(v) != 0 {
 			return
 		}
 	}
+	log.Errorf("[waitForMainHeaderSync] main chain 60s timeout")
 }
 
-func (this *SyncService) waitForSideHeaderSync(chainID uint64, heightBytes []byte) {
-	chainIDBytes, err := utils.GetUint64Bytes(chainID)
+func (this *SyncService) waitForSideHeaderSync(fromChain, toChainID uint64, heightBytes []byte) {
+	chainIDBytes, err := utils.GetUint64Bytes(fromChain)
 	if err != nil {
-		log.Errorf("[waitForHeaderSync] side chain %d, utils.GetUint64Bytes error: %s", chainID, err)
+		log.Errorf("[waitForSideHeaderSync] side chain %d header to side chain %d, utils.GetUint64Bytes error: %s", fromChain, toChainID, err)
 		return
 	}
 	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
-		v, err := this.sideChainMap[chainID].sdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+		v, err := this.getSideSdk(toChainID).GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
 			common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
 		if err != nil {
-			log.Errorf("[waitForHeaderSync] side chain %d, sdk.GetStorage error: %s", chainID, err)
+			log.Errorf("[waitForSideHeaderSync] side chain %d header to side chain %d, sdk.GetStorage error: %s", fromChain, toChainID, err)
 			return
 		}
 		if len(v) != 0 {
 			return
 		}
 	}
+	log.Errorf("[waitForSideHeaderSync] side chain %d header to side chain %d, 60s timeout", fromChain, toChainID)
 }

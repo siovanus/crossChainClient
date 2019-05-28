@@ -162,8 +162,8 @@ func (this *SyncService) SideMonitor(chainID uint64) {
 								chainID, err)
 						}
 						if toChainID == 0 {
-							this.syncHeaderToMain(toChainID, block.Header)
-							err = this.sendSideProofToMain(toChainID, requestID, i)
+							this.syncHeaderToMain(chainID, block.Header)
+							err = this.sendSideProofToMain(chainID, requestID, i)
 							if err != nil {
 								log.Errorf("[SideMonitor] side chain %d to main chain, this.sendProofToMain error:%s", chainID, err)
 							}
