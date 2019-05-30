@@ -245,11 +245,11 @@ func (this *SyncService) getSideKeyHeightsFromMain(chainID uint64) (*header_sync
 }
 
 func (this *SyncService) getSideKeyHeightsFromSide(fromChainID, toChainID uint64) (*header_sync.KeyHeights, error) {
-	chainIDBytes, err := utils.GetUint64Bytes(toChainID)
+	chainIDBytes, err := utils.GetUint64Bytes(fromChainID)
 	if err != nil {
 		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] GetUint64Bytes error:%s", err)
 	}
-	value, err := this.getSideSdk(fromChainID).GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+	value, err := this.getSideSdk(toChainID).GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
 		common.ConcatKey([]byte(header_sync.KEY_HEIGHTS), chainIDBytes))
 	if err != nil {
 		return nil, fmt.Errorf("[getSideKeyHeightsFromSide] sdk.GetStorage error: %s", err)
@@ -374,5 +374,6 @@ func (this *SyncService) syncConsensusPeersFromSideToSide(fromChainID, toChainID
 	if err != nil {
 		log.Errorf("[syncConsensusPeersFromSideToSide] this.syncHeaderAndProofToSide error in height %d: %s", merkleHeight, err)
 	}
+	this.waitForSideConsensusPeersSync(fromChainID, toChainID, merkleHeight)
 	return nil
 }

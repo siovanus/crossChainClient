@@ -83,3 +83,31 @@ func (this *SyncService) waitForSideHeaderSync(fromChain, toChainID uint64, heig
 	}
 	log.Errorf("[waitForSideHeaderSync] side chain %d header to side chain %d, 60s timeout", fromChain, toChainID)
 }
+
+func (this *SyncService) waitForSideConsensusPeersSync(fromChain, toChainID uint64, height uint32) {
+	chainIDBytes, err := utils.GetUint64Bytes(fromChain)
+	if err != nil {
+		log.Errorf("[waitForSideConsensusPeersSync] side chain %d consensus peers to side chain %d, utils.GetUint64Bytes error: %s",
+			fromChain, toChainID, err)
+		return
+	}
+	heightBytes, err := utils.GetUint32Bytes(height)
+	if err != nil {
+		log.Errorf("[waitForSideConsensusPeersSync] getUint32Bytes error: %v", err)
+		return
+	}
+	for i := 0; i < 60; i++ {
+		time.Sleep(time.Second)
+		v, err := this.getSideSdk(toChainID).GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+			common.ConcatKey([]byte(header_sync.CONSENSUS_PEER), chainIDBytes, heightBytes))
+		if err != nil {
+			log.Errorf("[waitForSideConsensusPeersSync] side chain %d consensus peers to side chain %d, sdk.GetStorage error: %s",
+				fromChain, toChainID, err)
+			return
+		}
+		if len(v) != 0 {
+			return
+		}
+	}
+	log.Errorf("[waitForSideConsensusPeersSync] side chain %d consensus peers to side chain %d, 60s timeout", fromChain, toChainID)
+}
