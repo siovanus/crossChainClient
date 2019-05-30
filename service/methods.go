@@ -310,8 +310,9 @@ func (this *SyncService) syncConsensusPeersToSide(fromChainID, toChainID uint64,
 	contractAddress := utils.HeaderSyncContractAddress
 	method := header_sync.SYNC_CONSENSUS_PEERS
 	param := &header_sync.SyncConsensusPeerParam{
-		Header: block.Header.ToArray(),
-		Proof:  crossStatesProof.AuditPath,
+		Address: this.account.Address,
+		Header:  block.Header.ToArray(),
+		Proof:   crossStatesProof.AuditPath,
 	}
 	txHash, err := this.getSideSdk(toChainID).Native.InvokeNativeContract(toChainID, this.GetGasPrice(),
 		this.GetGasLimit(), this.account, codeVersion, contractAddress, method, []interface{}{param})
@@ -374,6 +375,6 @@ func (this *SyncService) syncConsensusPeersFromSideToSide(fromChainID, toChainID
 	if err != nil {
 		log.Errorf("[syncConsensusPeersFromSideToSide] this.syncHeaderAndProofToSide error in height %d: %s", merkleHeight, err)
 	}
-	this.waitForSideConsensusPeersSync(fromChainID, toChainID, merkleHeight)
+	this.waitForSideConsensusPeersSync(fromChainID, toChainID, keyHeight)
 	return nil
 }
