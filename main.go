@@ -67,17 +67,17 @@ func startSync(ctx *cli.Context) {
 		return
 	}
 
-	mainSdk := sdk.NewOntologySdk()
-	mainSdk.NewRpcClient().SetAddress(config.DefConfig.MainJsonRpcAddress)
+	aliaSdk := sdk.NewOntologySdk()
+	aliaSdk.NewRpcClient().SetAddress(config.DefConfig.AliaJsonRpcAddress)
 	sideSdk := sdk.NewOntologySdk()
 	sideSdk.NewRpcClient().SetAddress(config.DefConfig.SideJsonRpcAddress)
-	account, ok := common.GetAccountByPassword(mainSdk, config.DefConfig.WalletFile)
+	account, ok := common.GetAccountByPassword(aliaSdk, config.DefConfig.WalletFile)
 	if !ok {
 		fmt.Println("common.GetAccountByPassword error")
 		return
 	}
 
-	syncService := service.NewSyncService(account, mainSdk, sideSdk)
+	syncService := service.NewSyncService(account, aliaSdk, sideSdk)
 	syncService.Run()
 
 	waitToExit()

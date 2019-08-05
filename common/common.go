@@ -21,8 +21,8 @@ package common
 import (
 	"fmt"
 
+	"github.com/ontio/multi-chain/common/password"
 	sdk "github.com/ontio/ontology-go-sdk"
-	"github.com/ontio/ontology/common/password"
 )
 
 func GetAccountByPassword(sdk *sdk.OntologySdk, path string) (*sdk.Account, bool) {

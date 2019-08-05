@@ -6,24 +6,24 @@ import (
 	"encoding/json"
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
+	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
+	"github.com/ontio/multi-chain/smartcontract/service/native/cross_chain_manager/ont"
 	sdk "github.com/ontio/ontology-go-sdk"
-	"github.com/ontio/ontology/consensus/vbft/config"
-	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 )
 
 type SyncService struct {
 	account        *sdk.Account
-	mainSdk        *sdk.OntologySdk
-	mainSyncHeight uint32
+	aliaSdk        *sdk.OntologySdk
+	aliaSyncHeight uint32
 	sideSdk        *sdk.OntologySdk
 	sideSyncHeight uint32
 	config         *config.Config
 }
 
-func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, sideSdk *sdk.OntologySdk) *SyncService {
+func NewSyncService(acct *sdk.Account, aliaSdk *sdk.OntologySdk, sideSdk *sdk.OntologySdk) *SyncService {
 	syncSvr := &SyncService{
 		account: acct,
-		mainSdk: mainSdk,
+		aliaSdk: aliaSdk,
 		sideSdk: sideSdk,
 		config:  config.DefConfig,
 	}
@@ -31,44 +31,44 @@ func NewSyncService(acct *sdk.Account, mainSdk *sdk.OntologySdk, sideSdk *sdk.On
 }
 
 func (this *SyncService) Run() {
-	go this.MainToSide()
-	go this.SideToMain()
+	go this.SideToAlliance()
+	go this.AllianceToSide()
 }
 
-func (this *SyncService) MainToSide() {
-	currentSideChainSyncHeight, err := this.GetCurrentSideChainSyncHeight(this.GetMainChainID())
+func (this *SyncService) SideToAlliance() {
+	currentSideChainSyncHeight, err := this.GetCurrentSideChainSyncHeight(this.GetAliaChainID())
 	if err != nil {
-		log.Errorf("[MainToSide] this.GetCurrentSideChainSyncHeight error:", err)
+		log.Errorf("[SideToAlliance] this.GetCurrentSideChainSyncHeight error:", err)
 		os.Exit(1)
 	}
 	this.sideSyncHeight = currentSideChainSyncHeight
 	for {
-		currentMainChainHeight, err := this.mainSdk.GetCurrentBlockHeight()
+		currentMainChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
 		if err != nil {
-			log.Errorf("[MainToSide] this.mainSdk.GetCurrentBlockHeight error:", err)
+			log.Errorf("[SideToAlliance] this.mainSdk.GetCurrentBlockHeight error:", err)
 		}
 		for i := this.sideSyncHeight; i < currentMainChainHeight; i++ {
-			log.Infof("[MainToSide] start parse block %d", i)
+			log.Infof("[SideToAlliance] start parse block %d", i)
 			//sync key header
-			block, err := this.mainSdk.GetBlockByHeight(i)
+			block, err := this.aliaSdk.GetBlockByHeight(i)
 			if err != nil {
-				log.Errorf("[MainToSide] this.mainSdk.GetBlockByHeight error:", err)
+				log.Errorf("[SideToAlliance] this.mainSdk.GetBlockByHeight error:", err)
 			}
 			blkInfo := &vconfig.VbftBlockInfo{}
 			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
-				log.Errorf("[MainToSide] unmarshal blockInfo error: %s", err)
+				log.Errorf("[SideToAlliance] unmarshal blockInfo error: %s", err)
 			}
 			if blkInfo.NewChainConfig != nil {
 				err = this.syncHeaderToSide(i)
 				if err != nil {
-					log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
+					log.Errorf("[SideToAlliance] this.syncHeaderToSide error:%s", err)
 				}
 			}
 
 			//sync cross chain info
-			events, err := this.mainSdk.GetSmartContractEventByBlock(i)
+			events, err := this.aliaSdk.GetSmartContractEventByBlock(i)
 			if err != nil {
-				log.Errorf("[MainToSide] this.mainSdk.GetSmartContractEventByBlock error:%s", err)
+				log.Errorf("[SideToAlliance] this.aliaSdk.GetSmartContractEventByBlock error:%s", err)
 				break
 			}
 			for _, event := range events {
@@ -78,15 +78,10 @@ func (this *SyncService) MainToSide() {
 						continue
 					}
 					name := states[0].(string)
-					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
-						requestID := uint64(states[2].(float64))
+					if name == ont.MAKE_FROM_ONT_PROOF {
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
-							log.Errorf("[MainToSide] this.syncHeaderToSide error:%s", err)
-						}
-						err = this.sendProofToSide(requestID, i)
-						if err != nil {
-							log.Errorf("[MainToSide] this.sendProofToSide error:%s", err)
+							log.Errorf("[SideToAlliance] this.syncHeaderToSide error:%s", err)
 						}
 					}
 				}
@@ -96,40 +91,40 @@ func (this *SyncService) MainToSide() {
 	}
 }
 
-func (this *SyncService) SideToMain() {
-	currentMainChainSyncHeight, err := this.GetCurrentMainChainSyncHeight(this.GetSideChainID())
+func (this *SyncService) AllianceToSide() {
+	currentAliaChainSyncHeight, err := this.GetCurrentAliaChainSyncHeight(this.GetSideChainID())
 	if err != nil {
-		log.Errorf("[SideToMain] this.GetCurrentMainChainSyncHeight error:", err)
+		log.Errorf("[AllianceToSide] this.GetCurrentMainChainSyncHeight error:", err)
 		os.Exit(1)
 	}
-	this.mainSyncHeight = currentMainChainSyncHeight
+	this.aliaSyncHeight = currentAliaChainSyncHeight
 	for {
 		currentSideChainHeight, err := this.sideSdk.GetCurrentBlockHeight()
 		if err != nil {
-			log.Errorf("[SideToMain] this.sideSdk.GetCurrentBlockHeight error:", err)
+			log.Errorf("[AllianceToSide] this.sideSdk.GetCurrentBlockHeight error:", err)
 		}
-		for i := this.mainSyncHeight; i < currentSideChainHeight; i++ {
-			log.Infof("[SideToMain] start parse block %d", i)
+		for i := this.aliaSyncHeight; i < currentSideChainHeight; i++ {
+			log.Infof("[AllianceToSide] start parse block %d", i)
 			//sync key header
 			block, err := this.sideSdk.GetBlockByHeight(i)
 			if err != nil {
-				log.Errorf("[SideToMain] this.mainSdk.GetBlockByHeight error:", err)
+				log.Errorf("[AllianceToSide] this.mainSdk.GetBlockByHeight error:", err)
 			}
 			blkInfo := &vconfig.VbftBlockInfo{}
 			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
-				log.Errorf("[SideToMain] unmarshal blockInfo error: %s", err)
+				log.Errorf("[AllianceToSide] unmarshal blockInfo error: %s", err)
 			}
 			if blkInfo.NewChainConfig != nil {
-				err = this.syncHeaderToMain(i)
+				err = this.syncHeaderToAlia(i)
 				if err != nil {
-					log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
+					log.Errorf("[AllianceToSide] this.syncHeaderToMain error:%s", err)
 				}
 			}
 
 			//sync cross chain info
 			events, err := this.sideSdk.GetSmartContractEventByBlock(i)
 			if err != nil {
-				log.Errorf("[SideToMain] this.sideSdk.GetSmartContractEventByBlock error:%s", err)
+				log.Errorf("[AllianceToSide] this.sideSdk.GetSmartContractEventByBlock error:%s", err)
 				break
 			}
 			for _, event := range events {
@@ -139,20 +134,15 @@ func (this *SyncService) SideToMain() {
 						continue
 					}
 					name := states[0].(string)
-					if name == cross_chain.CREATE_CROSS_CHAIN_TX {
-						requestID := uint64(states[2].(float64))
-						err = this.syncHeaderToMain(i + 1)
+					if name == ont.MAKE_TO_ONT_PROOF {
+						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
-							log.Errorf("[SideToMain] this.syncHeaderToMain error:%s", err)
-						}
-						err = this.sendProofToMain(requestID, i)
-						if err != nil {
-							log.Errorf("[SideToMain] this.sendProofToMain error:%s", err)
+							log.Errorf("[AllianceToSide] this.syncHeaderToMain error:%s", err)
 						}
 					}
 				}
 			}
-			this.mainSyncHeight++
+			this.aliaSyncHeight++
 		}
 	}
 
