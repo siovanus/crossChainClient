@@ -1,8 +1,8 @@
 {
-  "AliaJsonRpcAddress":"http://172.168.3.73:20336",
-  "SideJsonRpcAddress":"http://172.168.3.73:40336",
-  "AliaChainID": 0,
-  "SideChainID": 1,
+  "AliaJsonRpcAddress":"http://172.168.3.73:40336",
+  "SideJsonRpcAddress":"http://172.168.3.73:20336",
+  "AliaChainID": 2,
+  "SideChainID": 0,
   "WalletFile":"./wallet.dat",
   "GasPrice":0,
   "GasLimit":200000
