@@ -6,7 +6,7 @@ import (
 
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
-	"github.com/ontio/multi-chain/smartcontract/service/native/header_sync"
+	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
 
@@ -92,7 +92,7 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToAlia] invokeNativeContract error: %s", err)
 	}
-	log.Infof("[syncHeaderToAlia] syncHeaderToMain txHash is :", txHash.ToHexString())
+	log.Infof("[syncHeaderToAlia] syncHeaderToAlia txHash is :", txHash.ToHexString())
 	this.waitForAliaBlock()
 	this.waitForSideBlock()
 	return nil
