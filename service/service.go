@@ -35,7 +35,7 @@ func (this *SyncService) Run() {
 	go this.AllianceToSide()
 }
 
-func (this *SyncService) SideToAlliance() {
+func (this *SyncService) AllianceToSide() {
 	currentSideChainSyncHeight, err := this.GetCurrentSideChainSyncHeight(this.GetAliaChainID())
 	if err != nil {
 		log.Errorf("[SideToAlliance] this.GetCurrentSideChainSyncHeight error:", err)
@@ -78,7 +78,7 @@ func (this *SyncService) SideToAlliance() {
 						continue
 					}
 					name := states[0].(string)
-					if name == ont.MAKE_FROM_ONT_PROOF {
+					if name == ont.MAKE_TO_ONT_PROOF {
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
 							log.Errorf("[SideToAlliance] this.syncHeaderToSide error:%s", err)
@@ -91,7 +91,7 @@ func (this *SyncService) SideToAlliance() {
 	}
 }
 
-func (this *SyncService) AllianceToSide() {
+func (this *SyncService) SideToAlliance() {
 	currentAliaChainSyncHeight, err := this.GetCurrentAliaChainSyncHeight(this.GetSideChainID())
 	if err != nil {
 		log.Errorf("[AllianceToSide] this.GetCurrentMainChainSyncHeight error:", err)
@@ -134,7 +134,7 @@ func (this *SyncService) AllianceToSide() {
 						continue
 					}
 					name := states[0].(string)
-					if name == ont.MAKE_TO_ONT_PROOF {
+					if name == ont.MAKE_FROM_ONT_PROOF {
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
 							log.Errorf("[AllianceToSide] this.syncHeaderToMain error:%s", err)
