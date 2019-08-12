@@ -79,9 +79,14 @@ func (this *SyncService) AllianceToSide() {
 					}
 					name := states[0].(string)
 					if name == ont.MAKE_TO_ONT_PROOF {
+						requestID := uint64(states[2].(float64))
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
 							log.Errorf("[AllianceToSide] this.syncHeaderToSide error:%s", err)
+						}
+						err := this.syncProofToSide(requestID, i)
+						if err != nil {
+							log.Errorf("[AllianceToSide] this.syncProofToSide error:%s", err)
 						}
 					}
 				}
@@ -135,9 +140,14 @@ func (this *SyncService) SideToAlliance() {
 					}
 					name := states[0].(string)
 					if name == ont.MAKE_FROM_ONT_PROOF {
+						requestID := uint64(states[2].(float64))
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
 							log.Errorf("[SideToAlliance] this.syncHeaderToMain error:%s", err)
+						}
+						err := this.syncProofToAlia(requestID, i)
+						if err != nil {
+							log.Errorf("[SideToAlliance] this.syncProofToAlia error:%s", err)
 						}
 					}
 				}

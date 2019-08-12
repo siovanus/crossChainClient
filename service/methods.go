@@ -6,6 +6,9 @@ import (
 
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
+	"github.com/ontio/multi-chain/smartcontract/service/native/cross_chain_manager/inf"
+	ocommon "github.com/ontio/ontology/common"
+	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
@@ -98,6 +101,42 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	return nil
 }
 
+func (this *SyncService) syncProofToAlia(requestID uint64, height uint32) error {
+	//TODO: filter if tx is done
+
+	chainIDBytes, err := utils.GetUint64Bytes(this.GetAliaChainID())
+	if err != nil {
+		return fmt.Errorf("[syncProofToAlia] GetUint32Bytes error:%s", err)
+	}
+	prefix, err := utils.GetUint64Bytes(requestID)
+	if err != nil {
+		return fmt.Errorf("[syncProofToAlia] GetUint64Bytes error:%s", err)
+	}
+	crossChainAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08})
+	key := utils.ConcatKey(crossChainAddress, []byte(cross_chain.REQUEST), chainIDBytes, prefix)
+	proof, err := this.sideSdk.GetCrossStatesProof(height, key)
+	if err != nil {
+		return fmt.Errorf("[syncProofToAlia] this.sideSdk.GetMptProof error: %s", err)
+	}
+
+	contractAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10})
+	method := "ImportOuterTransfer"
+	param := &inf.EntranceParam{
+		SourceChainID:  this.GetSideChainID(),
+		Height:         height + 1,
+		Proof:          proof.AuditPath,
+		RelayerAddress: this.account.Address.ToBase58(),
+		TargetChainID:  this.GetAliaChainID(),
+	}
+	txHash, err := this.aliaSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
+		contractAddress, method, []interface{}{param})
+	if err != nil {
+		return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
+	}
+	log.Infof("[syncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
+	return nil
+}
+
 func (this *SyncService) syncHeaderToSide(height uint32) error {
 	chainIDBytes, err := utils.GetUint64Bytes(this.GetAliaChainID())
 	if err != nil {
@@ -129,6 +168,41 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 	log.Infof("[syncHeaderToSide] syncHeaderToSide txHash is :", txHash.ToHexString())
 	this.waitForSideBlock()
 	this.waitForSideBlock()
+	return nil
+}
+
+func (this *SyncService) syncProofToSide(requestID uint64, height uint32) error {
+	//TODO: filter if tx is done
+
+	chainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
+	if err != nil {
+		return fmt.Errorf("[syncProofToSide] GetUint32Bytes error:%s", err)
+	}
+	prefix, err := utils.GetUint64Bytes(requestID)
+	if err != nil {
+		return fmt.Errorf("[syncProofToSide] GetUint64Bytes error:%s", err)
+	}
+	crossChainAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08})
+	key := utils.ConcatKey(crossChainAddress, []byte(cross_chain.REQUEST), chainIDBytes, prefix)
+	proof, err := this.aliaSdk.GetCrossStatesProof(height, key)
+	if err != nil {
+		return fmt.Errorf("[syncProofToSide] this.sideSdk.GetMptProof error: %s", err)
+	}
+
+	contractAddress := crossChainAddress
+	method := cross_chain.PROCESS_CROSS_CHAIN_TX
+	param := &cross_chain.ProcessCrossChainTxParam{
+		Address:     this.account.Address,
+		FromChainID: this.GetSideChainID(),
+		Height:      height + 1,
+		Proof:       proof.AuditPath,
+	}
+	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
+		contractAddress, method, []interface{}{param})
+	if err != nil {
+		return fmt.Errorf("[syncProofToSide] invokeNativeContract error: %s", err)
+	}
+	log.Infof("[syncProofToSide] sendProofToMain txHash is :", txHash.ToHexString())
 	return nil
 }
 
