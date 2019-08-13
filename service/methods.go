@@ -97,7 +97,7 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	}
 	log.Infof("[syncHeaderToAlia] syncHeaderToAlia txHash is :", txHash.ToHexString())
 	this.waitForAliaBlock()
-	this.waitForSideBlock()
+	this.waitForAliaBlock()
 	return nil
 }
 
