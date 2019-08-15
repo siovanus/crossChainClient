@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -101,22 +102,16 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	return nil
 }
 
-func (this *SyncService) syncProofToAlia(requestID uint64, height uint32) error {
+func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 	//TODO: filter if tx is done
 
-	chainIDBytes, err := utils.GetUint64Bytes(this.GetAliaChainID())
+	k, err := hex.DecodeString(key)
 	if err != nil {
-		return fmt.Errorf("[syncProofToAlia] GetUint32Bytes error:%s", err)
+		return fmt.Errorf("[syncProofToAlia] hex.DecodeString error: %s", err)
 	}
-	prefix, err := utils.GetUint64Bytes(requestID)
+	proof, err := this.sideSdk.GetCrossStatesProof(height, k)
 	if err != nil {
-		return fmt.Errorf("[syncProofToAlia] GetUint64Bytes error:%s", err)
-	}
-	crossChainAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08})
-	key := utils.ConcatKey(crossChainAddress, []byte(cross_chain.REQUEST), chainIDBytes, prefix)
-	proof, err := this.sideSdk.GetCrossStatesProof(height, key)
-	if err != nil {
-		return fmt.Errorf("[syncProofToAlia] this.sideSdk.GetMptProof error: %s", err)
+		return fmt.Errorf("[syncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
 	}
 
 	contractAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10})
@@ -171,24 +166,19 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 	return nil
 }
 
-func (this *SyncService) syncProofToSide(requestID uint64, height uint32) error {
+func (this *SyncService) syncProofToSide(key string, height uint32) error {
 	//TODO: filter if tx is done
 
-	chainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
+	k, err := hex.DecodeString(key)
 	if err != nil {
-		return fmt.Errorf("[syncProofToSide] GetUint32Bytes error:%s", err)
+		return fmt.Errorf("[syncProofToSide] hex.DecodeString error: %s", err)
 	}
-	prefix, err := utils.GetUint64Bytes(requestID)
-	if err != nil {
-		return fmt.Errorf("[syncProofToSide] GetUint64Bytes error:%s", err)
-	}
-	crossChainAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08})
-	key := utils.ConcatKey(crossChainAddress, []byte(cross_chain.REQUEST), chainIDBytes, prefix)
-	proof, err := this.aliaSdk.GetCrossStatesProof(height, key)
+	proof, err := this.aliaSdk.GetCrossStatesProof(height, k)
 	if err != nil {
 		return fmt.Errorf("[syncProofToSide] this.sideSdk.GetMptProof error: %s", err)
 	}
 
+	crossChainAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08})
 	contractAddress := crossChainAddress
 	method := cross_chain.PROCESS_CROSS_CHAIN_TX
 	param := &cross_chain.ProcessCrossChainTxParam{
