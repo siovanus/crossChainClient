@@ -183,7 +183,7 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 	method := cross_chain.PROCESS_CROSS_CHAIN_TX
 	param := &cross_chain.ProcessCrossChainTxParam{
 		Address:     this.account.Address,
-		FromChainID: this.GetSideChainID(),
+		FromChainID: this.GetAliaChainID(),
 		Height:      height + 1,
 		Proof:       proof.AuditPath,
 	}
