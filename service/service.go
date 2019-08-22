@@ -143,7 +143,7 @@ func (this *SyncService) SideToAlliance() {
 						key := states[3].(string)
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
-							log.Errorf("[SideToAlliance] this.syncHeaderToMain error:%s", err)
+							log.Errorf("[SideToAlliance] this.syncHeaderToAlia error:%s", err)
 						}
 						err := this.syncProofToAlia(key, i)
 						if err != nil {

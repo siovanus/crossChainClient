@@ -192,7 +192,7 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 	if err != nil {
 		return fmt.Errorf("[syncProofToSide] invokeNativeContract error: %s", err)
 	}
-	log.Infof("[syncProofToSide] sendProofToMain txHash is :", txHash.ToHexString())
+	log.Infof("[syncProofToSide] syncProofToSide txHash is :", txHash.ToHexString())
 	return nil
 }
 
