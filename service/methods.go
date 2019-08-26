@@ -98,7 +98,6 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	}
 	log.Infof("[syncHeaderToAlia] syncHeaderToAlia txHash is :", txHash.ToHexString())
 	this.waitForAliaBlock()
-	this.waitForAliaBlock()
 	return nil
 }
 
@@ -162,7 +161,6 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 	}
 	log.Infof("[syncHeaderToSide] syncHeaderToSide txHash is :", txHash.ToHexString())
 	this.waitForSideBlock()
-	this.waitForSideBlock()
 	return nil
 }
 
@@ -197,14 +195,14 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 }
 
 func (this *SyncService) waitForAliaBlock() {
-	_, err := this.aliaSdk.WaitForGenerateBlock(30*time.Second, 1)
+	_, err := this.aliaSdk.WaitForGenerateBlock(90*time.Second, 3)
 	if err != nil {
 		log.Errorf("waitForAliaBlock error:%s", err)
 	}
 }
 
 func (this *SyncService) waitForSideBlock() {
-	_, err := this.sideSdk.WaitForGenerateBlock(30*time.Second, 1)
+	_, err := this.sideSdk.WaitForGenerateBlock(90*time.Second, 3)
 	if err != nil {
 		log.Errorf("waitForSideBlock error:%s", err)
 	}
