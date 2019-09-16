@@ -1,31 +1,35 @@
 package service
 
 import (
+	"encoding/json"
 	"os"
 
-	"encoding/json"
+	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
+	asdk "github.com/ontio/multi-chain-go-sdk"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
-	"github.com/ontio/multi-chain/smartcontract/service/native/cross_chain_manager/ont"
+	aont "github.com/ontio/multi-chain/native/service/cross_chain_manager/ont"
 	sdk "github.com/ontio/ontology-go-sdk"
 )
 
 type SyncService struct {
-	account        *sdk.Account
-	aliaSdk        *sdk.OntologySdk
+	aliaAccount    *asdk.Account
+	aliaSdk        *asdk.MultiChainSdk
 	aliaSyncHeight uint32
+	sideAccount    *sdk.Account
 	sideSdk        *sdk.OntologySdk
 	sideSyncHeight uint32
 	config         *config.Config
 }
 
-func NewSyncService(acct *sdk.Account, aliaSdk *sdk.OntologySdk, sideSdk *sdk.OntologySdk) *SyncService {
+func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk *asdk.MultiChainSdk, sideSdk *sdk.OntologySdk) *SyncService {
 	syncSvr := &SyncService{
-		account: acct,
-		aliaSdk: aliaSdk,
-		sideSdk: sideSdk,
-		config:  config.DefConfig,
+		aliaAccount: aliaAccount,
+		aliaSdk:     aliaSdk,
+		sideAccount: sideAccount,
+		sideSdk:     sideSdk,
+		config:      config.DefConfig,
 	}
 	return syncSvr
 }
@@ -78,7 +82,7 @@ func (this *SyncService) AllianceToSide() {
 						continue
 					}
 					name := states[0].(string)
-					if name == ont.MAKE_TO_ONT_PROOF {
+					if name == aont.MAKE_TO_ONT_PROOF {
 						key := states[3].(string)
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
@@ -139,7 +143,7 @@ func (this *SyncService) SideToAlliance() {
 						continue
 					}
 					name := states[0].(string)
-					if name == ont.MAKE_FROM_ONT_PROOF {
+					if name == cross_chain.MAKE_FROM_ONT_PROOF {
 						key := states[3].(string)
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {

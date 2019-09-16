@@ -29,6 +29,7 @@ import (
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	"github.com/ontio/crossChainClient/service"
+	asdk "github.com/ontio/multi-chain-go-sdk"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/urfave/cli"
 )
@@ -67,17 +68,22 @@ func startSync(ctx *cli.Context) {
 		return
 	}
 
-	aliaSdk := sdk.NewOntologySdk()
+	aliaSdk := asdk.NewMultiChainSdk()
 	aliaSdk.NewRpcClient().SetAddress(config.DefConfig.AliaJsonRpcAddress)
 	sideSdk := sdk.NewOntologySdk()
 	sideSdk.NewRpcClient().SetAddress(config.DefConfig.SideJsonRpcAddress)
-	account, ok := common.GetAccountByPassword(aliaSdk, config.DefConfig.WalletFile)
+	aliaAccount, ok := common.GetAliaAccountByPassword(aliaSdk, config.DefConfig.WalletFile)
+	if !ok {
+		fmt.Println("common.GetAccountByPassword error")
+		return
+	}
+	sideAccount, ok := common.GetSideAccountByPassword(sideSdk, config.DefConfig.WalletFile)
 	if !ok {
 		fmt.Println("common.GetAccountByPassword error")
 		return
 	}
 
-	syncService := service.NewSyncService(account, aliaSdk, sideSdk)
+	syncService := service.NewSyncService(aliaAccount, sideAccount, aliaSdk, sideSdk)
 	syncService.Run()
 
 	waitToExit()

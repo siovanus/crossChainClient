@@ -7,7 +7,6 @@ import (
 
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
-	"github.com/ontio/multi-chain/smartcontract/service/native/cross_chain_manager/inf"
 	ocommon "github.com/ontio/ontology/common"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
@@ -82,17 +81,12 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	if len(v) != 0 {
 		return nil
 	}
-	contractAddress := utils.HeaderSyncContractAddress
-	method := header_sync.SYNC_BLOCK_HEADER
 	block, err := this.sideSdk.GetBlockByHeight(height)
 	if err != nil {
 		log.Errorf("[syncHeaderToAlia] this.mainSdk.GetBlockByHeight error:%s", err)
 	}
-	param := &header_sync.SyncBlockHeaderParam{
-		Headers: [][]byte{block.Header.ToArray()},
-	}
-	txHash, err := this.aliaSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
-		contractAddress, method, []interface{}{param})
+	txHash, err := this.aliaSdk.Native.Hs.SyncBlockHeader(this.aliaAccount.Address, [][]byte{block.Header.ToArray()},
+		this.aliaAccount)
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToAlia] invokeNativeContract error: %s", err)
 	}
@@ -113,17 +107,8 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 		return fmt.Errorf("[syncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
 	}
 
-	contractAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10})
-	method := "ImportOuterTransfer"
-	param := &inf.EntranceParam{
-		SourceChainID:  this.GetSideChainID(),
-		Height:         height + 1,
-		Proof:          proof.AuditPath,
-		RelayerAddress: this.account.Address.ToBase58(),
-		TargetChainID:  this.GetAliaChainID(),
-	}
-	txHash, err := this.aliaSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
-		contractAddress, method, []interface{}{param})
+	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height + 1, proof.AuditPath,
+		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
 	if err != nil {
 		return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
 	}
@@ -154,7 +139,7 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 	param := &header_sync.SyncBlockHeaderParam{
 		Headers: [][]byte{block.Header.ToArray()},
 	}
-	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
+	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.sideAccount, codeVersion,
 		contractAddress, method, []interface{}{param})
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToSide] invokeNativeContract error: %s", err)
@@ -167,11 +152,7 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 func (this *SyncService) syncProofToSide(key string, height uint32) error {
 	//TODO: filter if tx is done
 
-	k, err := hex.DecodeString(key)
-	if err != nil {
-		return fmt.Errorf("[syncProofToSide] hex.DecodeString error: %s", err)
-	}
-	proof, err := this.aliaSdk.GetCrossStatesProof(height, k)
+	proof, err := this.aliaSdk.ClientMgr.GetCrossStatesProof(height, key)
 	if err != nil {
 		return fmt.Errorf("[syncProofToSide] this.sideSdk.GetMptProof error: %s", err)
 	}
@@ -180,12 +161,12 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 	contractAddress := crossChainAddress
 	method := cross_chain.PROCESS_CROSS_CHAIN_TX
 	param := &cross_chain.ProcessCrossChainTxParam{
-		Address:     this.account.Address,
+		Address:     this.sideAccount.Address,
 		FromChainID: this.GetAliaChainID(),
 		Height:      height + 1,
 		Proof:       proof.AuditPath,
 	}
-	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.account, codeVersion,
+	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.sideAccount, codeVersion,
 		contractAddress, method, []interface{}{param})
 	if err != nil {
 		return fmt.Errorf("[syncProofToSide] invokeNativeContract error: %s", err)
