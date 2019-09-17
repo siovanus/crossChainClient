@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/log"
 	asdk "github.com/ontio/multi-chain-go-sdk"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
 	aont "github.com/ontio/multi-chain/native/service/cross_chain_manager/ont"
 	sdk "github.com/ontio/ontology-go-sdk"
+	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
+	"github.com/ontio/ontology/smartcontract/service/native/utils"
+	autils "github.com/ontio/multi-chain/native/service/utils"
 )
 
 type SyncService struct {
@@ -81,6 +83,9 @@ func (this *SyncService) AllianceToSide() {
 					if !ok {
 						continue
 					}
+					if notify.ContractAddress != autils.CrossChainManagerContractAddress.ToHexString() {
+						continue
+					}
 					name := states[0].(string)
 					if name == aont.MAKE_TO_ONT_PROOF {
 						key := states[3].(string)
@@ -140,6 +145,9 @@ func (this *SyncService) SideToAlliance() {
 				for _, notify := range event.Notify {
 					states, ok := notify.States.([]interface{})
 					if !ok {
+						continue
+					}
+					if notify.ContractAddress != utils.CrossChainContractAddress.ToHexString() {
 						continue
 					}
 					name := states[0].(string)

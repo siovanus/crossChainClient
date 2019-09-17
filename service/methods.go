@@ -7,6 +7,7 @@ import (
 
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
+	autils "github.com/ontio/multi-chain/native/service/utils"
 	ocommon "github.com/ontio/ontology/common"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
@@ -50,8 +51,8 @@ func (this *SyncService) GetCurrentSideChainSyncHeight(aliaChainID uint64) (uint
 }
 
 func (this *SyncService) GetCurrentAliaChainSyncHeight(sideChainID uint64) (uint32, error) {
-	contractAddress := utils.HeaderSyncContractAddress
-	sideChainIDBytes, err := utils.GetUint64Bytes(sideChainID)
+	contractAddress := autils.HeaderSyncContractAddress
+	sideChainIDBytes, err := autils.GetUint64Bytes(sideChainID)
 	if err != nil {
 		return 0, fmt.Errorf("GetUint32Bytes, get viewBytes error: %s", err)
 	}
@@ -60,7 +61,7 @@ func (this *SyncService) GetCurrentAliaChainSyncHeight(sideChainID uint64) (uint
 	if err != nil {
 		return 0, fmt.Errorf("getStorage error: %s", err)
 	}
-	height, err := utils.GetBytesUint32(value)
+	height, err := autils.GetBytesUint32(value)
 	if err != nil {
 		return 0, fmt.Errorf("GetBytesUint32, get height error: %s", err)
 	}
@@ -68,15 +69,15 @@ func (this *SyncService) GetCurrentAliaChainSyncHeight(sideChainID uint64) (uint
 }
 
 func (this *SyncService) syncHeaderToAlia(height uint32) error {
-	chainIDBytes, err := utils.GetUint64Bytes(this.GetSideChainID())
+	chainIDBytes, err := autils.GetUint64Bytes(this.GetSideChainID())
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToAlia] chainIDBytes, getUint32Bytes error: %v", err)
 	}
-	heightBytes, err := utils.GetUint32Bytes(height)
+	heightBytes, err := autils.GetUint32Bytes(height)
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToAlia] heightBytes, getUint32Bytes error: %v", err)
 	}
-	v, err := this.aliaSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
+	v, err := this.aliaSdk.GetStorage(autils.HeaderSyncContractAddress.ToHexString(),
 		common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
 	if len(v) != 0 {
 		return nil
@@ -107,7 +108,7 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 		return fmt.Errorf("[syncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
 	}
 
-	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height + 1, proof.AuditPath,
+	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height+1, proof.AuditPath,
 		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
 	if err != nil {
 		return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
