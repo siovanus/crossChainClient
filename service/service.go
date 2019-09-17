@@ -103,7 +103,7 @@ func (this *SyncService) AllianceToSide() {
 func (this *SyncService) SideToAlliance() {
 	currentAliaChainSyncHeight, err := this.GetCurrentAliaChainSyncHeight(this.GetSideChainID())
 	if err != nil {
-		log.Errorf("[SideToAlliance] this.GetCurrentMainChainSyncHeight error:", err)
+		log.Errorf("[SideToAlliance] this.GetCurrentAliaChainSyncHeight error:", err)
 		os.Exit(1)
 	}
 	this.aliaSyncHeight = currentAliaChainSyncHeight
