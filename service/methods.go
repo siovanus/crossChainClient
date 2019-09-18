@@ -86,7 +86,7 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	if err != nil {
 		log.Errorf("[syncHeaderToAlia] this.mainSdk.GetBlockByHeight error:%s", err)
 	}
-	txHash, err := this.aliaSdk.Native.Hs.SyncBlockHeader(this.aliaAccount.Address, [][]byte{block.Header.ToArray()},
+	txHash, err := this.aliaSdk.Native.Hs.SyncBlockHeader(this.GetSideChainID(), this.aliaAccount.Address, [][]byte{block.Header.ToArray()},
 		this.aliaAccount)
 	if err != nil {
 		return fmt.Errorf("[syncHeaderToAlia] invokeNativeContract error: %s", err)

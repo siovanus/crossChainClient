@@ -9,10 +9,10 @@ import (
 	asdk "github.com/ontio/multi-chain-go-sdk"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
 	aont "github.com/ontio/multi-chain/native/service/cross_chain_manager/ont"
+	autils "github.com/ontio/multi-chain/native/service/utils"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
-	autils "github.com/ontio/multi-chain/native/service/utils"
 )
 
 type SyncService struct {
@@ -58,7 +58,7 @@ func (this *SyncService) AllianceToSide() {
 			//sync key header
 			block, err := this.aliaSdk.GetBlockByHeight(i)
 			if err != nil {
-				log.Errorf("[AllianceToSide] this.mainSdk.GetBlockByHeight error:", err)
+				log.Errorf("[AllianceToSide] this.aliaSdk.GetBlockByHeight error:", err)
 			}
 			blkInfo := &vconfig.VbftBlockInfo{}
 			if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
@@ -88,7 +88,7 @@ func (this *SyncService) AllianceToSide() {
 					}
 					name := states[0].(string)
 					if name == aont.MAKE_TO_ONT_PROOF {
-						key := states[3].(string)
+						key := states[4].(string)
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
 							log.Errorf("[AllianceToSide] this.syncHeaderToSide error:%s", err)
@@ -152,7 +152,7 @@ func (this *SyncService) SideToAlliance() {
 					}
 					name := states[0].(string)
 					if name == cross_chain.MAKE_FROM_ONT_PROOF {
-						key := states[3].(string)
+						key := states[4].(string)
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
 							log.Errorf("[SideToAlliance] this.syncHeaderToAlia error:%s", err)
