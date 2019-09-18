@@ -8,7 +8,7 @@ import (
 	"github.com/ontio/crossChainClient/log"
 	asdk "github.com/ontio/multi-chain-go-sdk"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
-	aont "github.com/ontio/multi-chain/native/service/cross_chain_manager/ont"
+	aneo "github.com/ontio/multi-chain/native/service/cross_chain_manager/neo"
 	autils "github.com/ontio/multi-chain/native/service/utils"
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
@@ -87,7 +87,7 @@ func (this *SyncService) AllianceToSide() {
 						continue
 					}
 					name := states[0].(string)
-					if name == aont.MAKE_TO_ONT_PROOF {
+					if name == aneo.MAKE_TO_NEO_PROOF {
 						key := states[4].(string)
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
