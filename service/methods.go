@@ -8,7 +8,6 @@ import (
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
 	autils "github.com/ontio/multi-chain/native/service/utils"
-	ocommon "github.com/ontio/ontology/common"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
@@ -158,8 +157,7 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 		return fmt.Errorf("[syncProofToSide] this.sideSdk.GetMptProof error: %s", err)
 	}
 
-	crossChainAddress, _ := ocommon.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08})
-	contractAddress := crossChainAddress
+	contractAddress := utils.CrossChainContractAddress
 	method := cross_chain.PROCESS_CROSS_CHAIN_TX
 	param := &cross_chain.ProcessCrossChainTxParam{
 		Address:     this.sideAccount.Address,

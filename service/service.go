@@ -151,7 +151,7 @@ func (this *SyncService) SideToAlliance() {
 						continue
 					}
 					name := states[0].(string)
-					if name == cross_chain.MAKE_FROM_ONT_PROOF {
+					if name == cross_chain.MAKE_FROM_NEO_PROOF {
 						key := states[4].(string)
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
