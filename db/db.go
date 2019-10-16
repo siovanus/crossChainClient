@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/boltdb/bolt"
-	"github.com/ontio/crossChainClient/common"
+	"github.com/ontio/multi-chain/common"
 )
 
 var (
@@ -46,14 +46,13 @@ func NewWaitingDB(filePath string) (*WaitingDB, error) {
 	return w, nil
 }
 
-func (w *WaitingDB) Put(height uint32, v string) error {
+func (w *WaitingDB) Put(k []byte) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	return w.db.Update(func(btx *bolt.Tx) error {
 		bucket := btx.Bucket(BKTWaiting)
-		heightBytes := common.GetUint32Bytes(height)
-		err := bucket.Put(heightBytes, []byte(v))
+		err := bucket.Put(k, []byte{0x00})
 		if err != nil {
 			return err
 		}
@@ -62,37 +61,50 @@ func (w *WaitingDB) Put(height uint32, v string) error {
 	})
 }
 
-func (w *WaitingDB) GetWaitingAndDelete(h uint32) (map[uint32]string, error) {
+func (w *WaitingDB) Delete(k []byte) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	deletList := make([][]byte, 0)
-	keyList := make(map[uint32]string, 0)
+	return w.db.Update(func(btx *bolt.Tx) error {
+		bucket := btx.Bucket(BKTWaiting)
+		err := bucket.Delete(k)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (w *WaitingDB) GetWaitingAndDelete(h uint32) ([]*Waiting, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	deleteList := make([][]byte, 0)
+	waitingList := make([]*Waiting, 0)
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTWaiting)
-		err := bw.ForEach(func(k, v []byte) error {
-			height := common.GetBytesUint32(k)
-			keyList[height] = string(v)
-			if height <= h-50 {
-				deletList = append(deletList, k)
+		err := bw.ForEach(func(k, _ []byte) error {
+			waiting := new(Waiting)
+			err := waiting.Deserialization(common.NewZeroCopySource(k))
+			if err != nil {
+				return err
+			}
+			waitingList = append(waitingList, waiting)
+			if waiting.AliaChainHeight <= h-50 {
+				deleteList = append(deleteList, k)
 			}
 			return nil
 		})
 		if err != nil {
 			return err
 		}
-		for _, k := range deletList {
-			err = bw.Delete(k)
-			if err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return keyList, nil
+	return waitingList, nil
 }
 
 func (w *WaitingDB) Close() {

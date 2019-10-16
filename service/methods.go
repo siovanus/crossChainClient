@@ -3,10 +3,13 @@ package service
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ontio/crossChainClient/db"
+	"strings"
 	"time"
 
 	"github.com/ontio/crossChainClient/common"
 	"github.com/ontio/crossChainClient/log"
+	acommon "github.com/ontio/multi-chain/common"
 	autils "github.com/ontio/multi-chain/native/service/utils"
 	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/header_sync"
@@ -93,14 +96,69 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height+1, proof.AuditPath,
 		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
 	if err != nil {
-		err := this.db.Put(height, key)
-		if err != nil {
-			log.Errorf("[syncProofToAlia] this.db.Put error: %s", err)
+		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
+			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
+			if err != nil {
+				log.Errorf("[syncProofToAlia] this.mainSdk.GetCurrentBlockHeight error:", err)
+			}
+			waiting := &db.Waiting{
+				AliaChainHeight: aliaChainHeight,
+				Height:          height,
+				Key:             key,
+			}
+			sink := acommon.NewZeroCopySink(nil)
+			waiting.Serialization(sink)
+			err = this.db.Put(sink.Bytes())
+			if err != nil {
+				log.Errorf("[syncProofToAlia] this.db.Put error: %s", err)
+			}
+			log.Info("[syncProofToAlia] put tx into waiting db, height %d, key %s", height, key)
+			return nil
+		} else {
+			return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
 		}
-		return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
 	}
 	log.Infof("[syncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
 	return nil
+}
+
+func (this *SyncService) retrySyncProofToAlia(key string, height uint32) (bool, error) {
+	k, err := hex.DecodeString(key)
+	if err != nil {
+		return false, fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
+	}
+	proof, err := this.sideSdk.GetCrossStatesProof(height, k)
+	if err != nil {
+		return false, fmt.Errorf("[retrySyncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
+	}
+
+	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height+1, proof.AuditPath,
+		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
+	if err != nil {
+		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
+			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
+			if err != nil {
+				log.Errorf("[retrySyncProofToAlia] this.mainSdk.GetCurrentBlockHeight error:", err)
+			}
+			waiting := &db.Waiting{
+				AliaChainHeight: aliaChainHeight,
+				Height:          height,
+				Key:             key,
+			}
+			sink := acommon.NewZeroCopySink(nil)
+			waiting.Serialization(sink)
+			err = this.db.Put(sink.Bytes())
+			if err != nil {
+				log.Errorf("[retrySyncProofToAlia] this.db.Put error: %s", err)
+			}
+			log.Info("[retrySyncProofToAlia] remain tx in waiting db, height %d, key %s", height, key)
+			return false, nil
+		} else {
+			return true, fmt.Errorf("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
+		}
+	}
+	log.Infof("[retrySyncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
+	return true, nil
 }
 
 func (this *SyncService) syncHeaderToSide(height uint32) error {

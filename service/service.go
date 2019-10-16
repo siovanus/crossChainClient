@@ -8,6 +8,7 @@ import (
 	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
 	asdk "github.com/ontio/multi-chain-go-sdk"
+	"github.com/ontio/multi-chain/common"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
 	aont "github.com/ontio/multi-chain/native/service/cross_chain_manager/ont"
 	autils "github.com/ontio/multi-chain/native/service/utils"
@@ -58,11 +59,11 @@ func (this *SyncService) AllianceToSide() {
 	}
 	this.sideSyncHeight = currentSideChainSyncHeight
 	for {
-		currentMainChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
+		currentAliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
 		if err != nil {
 			log.Errorf("[AllianceToSide] this.mainSdk.GetCurrentBlockHeight error:", err)
 		}
-		for i := this.sideSyncHeight; i < currentMainChainHeight; i++ {
+		for i := this.sideSyncHeight; i < currentAliaChainHeight; i++ {
 			log.Infof("[AllianceToSide] start parse block %d", i)
 			//sync key header
 			block, err := this.aliaSdk.GetBlockByHeight(i)
@@ -180,19 +181,27 @@ func (this *SyncService) SideToAlliance() {
 
 func (this *SyncService) ProcessToAllianceWaiting() {
 	for {
-		currentSideChainHeight, err := this.sideSdk.GetCurrentBlockHeight()
+		currentAliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
 		if err != nil {
-			log.Errorf("[ProcessToAllianceWaiting] this.sideSdk.GetCurrentBlockHeight error:", err)
+			log.Errorf("[ProcessToAllianceWaiting] this.mainSdk.GetCurrentBlockHeight error:", err)
 		}
-		if currentSideChainHeight%10 == 0 {
-			waiting, err := this.db.GetWaitingAndDelete(currentSideChainHeight)
+		if currentAliaChainHeight%10 == 0 {
+			waitingList, err := this.db.GetWaitingAndDelete(currentAliaChainHeight)
 			if err != nil {
 				log.Errorf("[ProcessToAllianceWaiting] this.db.GetWaitingAndDelete error:%s", err)
 			}
-			for height, key := range waiting {
-				err := this.syncProofToAlia(key, height)
+			for _, waiting := range waitingList {
+				ok, err := this.retrySyncProofToAlia(waiting.Key, waiting.Height)
 				if err != nil {
-					log.Errorf("[ProcessToAllianceWaiting] this.syncProofToAlia error:%s", err)
+					log.Errorf("[ProcessToAllianceWaiting] this.retrySyncProofToAlia error:%s", err)
+				}
+				sink := common.NewZeroCopySink(nil)
+				waiting.Serialization(sink)
+				if ok {
+					err := this.db.Delete(sink.Bytes())
+					if err != nil {
+						log.Errorf("[ProcessToAllianceWaiting] this.db.Delete error:%s", err)
+					}
 				}
 			}
 		}
