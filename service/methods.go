@@ -33,10 +33,7 @@ func (this *SyncService) GetGasLimit() uint64 {
 
 func (this *SyncService) GetCurrentSideChainSyncHeight(aliaChainID uint64) (uint32, error) {
 	contractAddress := utils.HeaderSyncContractAddress
-	aliaChainIDBytes, err := utils.GetUint64Bytes(aliaChainID)
-	if err != nil {
-		return 0, fmt.Errorf("GetUint32Bytes, get viewBytes error: %s", err)
-	}
+	aliaChainIDBytes := common.GetUint64Bytes(aliaChainID)
 	key := common.ConcatKey([]byte(header_sync.CURRENT_HEIGHT), aliaChainIDBytes)
 	value, err := this.sideSdk.ClientMgr.GetStorage(contractAddress.ToHexString(), key)
 	if err != nil {
@@ -51,7 +48,7 @@ func (this *SyncService) GetCurrentSideChainSyncHeight(aliaChainID uint64) (uint
 
 func (this *SyncService) GetCurrentAliaChainSyncHeight(sideChainID uint64) (uint32, error) {
 	contractAddress := autils.HeaderSyncContractAddress
-	sideChainIDBytes := autils.GetUint64Bytes(sideChainID)
+	sideChainIDBytes := common.GetUint64Bytes(sideChainID)
 	key := common.ConcatKey([]byte(header_sync.CURRENT_HEIGHT), sideChainIDBytes)
 	value, err := this.aliaSdk.ClientMgr.GetStorage(contractAddress.ToHexString(), key)
 	if err != nil {
@@ -62,8 +59,8 @@ func (this *SyncService) GetCurrentAliaChainSyncHeight(sideChainID uint64) (uint
 }
 
 func (this *SyncService) syncHeaderToAlia(height uint32) error {
-	chainIDBytes := autils.GetUint64Bytes(this.GetSideChainID())
-	heightBytes := autils.GetUint32Bytes(height)
+	chainIDBytes := common.GetUint64Bytes(this.GetSideChainID())
+	heightBytes := common.GetUint32Bytes(height)
 	v, err := this.aliaSdk.GetStorage(autils.HeaderSyncContractAddress.ToHexString(),
 		common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
 	if len(v) != 0 {
@@ -84,8 +81,6 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 }
 
 func (this *SyncService) syncProofToAlia(key string, height uint32) error {
-	//TODO: filter if tx is done
-
 	k, err := hex.DecodeString(key)
 	if err != nil {
 		return fmt.Errorf("[syncProofToAlia] hex.DecodeString error: %s", err)
@@ -98,6 +93,10 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height+1, proof.AuditPath,
 		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
 	if err != nil {
+		err := this.db.Put(height, key)
+		if err != nil {
+			log.Errorf("[syncProofToAlia] this.db.Put error: %s", err)
+		}
 		return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
 	}
 	log.Infof("[syncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
@@ -105,14 +104,8 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 }
 
 func (this *SyncService) syncHeaderToSide(height uint32) error {
-	chainIDBytes, err := utils.GetUint64Bytes(this.GetAliaChainID())
-	if err != nil {
-		return fmt.Errorf("[syncHeaderToSide] chainIDBytes, getUint32Bytes error: %v", err)
-	}
-	heightBytes, err := utils.GetUint32Bytes(height)
-	if err != nil {
-		return fmt.Errorf("[syncHeaderToSide] heightBytes, getUint32Bytes error: %v", err)
-	}
+	chainIDBytes := common.GetUint64Bytes(this.GetAliaChainID())
+	heightBytes := common.GetUint32Bytes(height)
 	v, err := this.sideSdk.GetStorage(utils.HeaderSyncContractAddress.ToHexString(),
 		common.ConcatKey([]byte(header_sync.HEADER_INDEX), chainIDBytes, heightBytes))
 	if len(v) != 0 {
@@ -138,8 +131,6 @@ func (this *SyncService) syncHeaderToSide(height uint32) error {
 }
 
 func (this *SyncService) syncProofToSide(key string, height uint32) error {
-	//TODO: filter if tx is done
-
 	proof, err := this.aliaSdk.ClientMgr.GetCrossStatesProof(height, key)
 	if err != nil {
 		return fmt.Errorf("[syncProofToSide] this.sideSdk.GetMptProof error: %s", err)

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ontio/crossChainClient/config"
+	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
 	asdk "github.com/ontio/multi-chain-go-sdk"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
@@ -22,15 +23,22 @@ type SyncService struct {
 	sideAccount    *sdk.Account
 	sideSdk        *sdk.OntologySdk
 	sideSyncHeight uint32
+	db             *db.WaitingDB
 	config         *config.Config
 }
 
 func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk *asdk.MultiChainSdk, sideSdk *sdk.OntologySdk) *SyncService {
+	boltDB, err := db.NewWaitingDB("data")
+	if err != nil {
+		log.Errorf("db.NewWaitingDB error:%s", err)
+		os.Exit(1)
+	}
 	syncSvr := &SyncService{
 		aliaAccount: aliaAccount,
 		aliaSdk:     aliaSdk,
 		sideAccount: sideAccount,
 		sideSdk:     sideSdk,
+		db:          boltDB,
 		config:      config.DefConfig,
 	}
 	return syncSvr
@@ -39,6 +47,7 @@ func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk
 func (this *SyncService) Run() {
 	go this.SideToAlliance()
 	go this.AllianceToSide()
+	go this.ProcessToAllianceWaiting()
 }
 
 func (this *SyncService) AllianceToSide() {
@@ -167,5 +176,25 @@ func (this *SyncService) SideToAlliance() {
 			this.aliaSyncHeight++
 		}
 	}
+}
 
+func (this *SyncService) ProcessToAllianceWaiting() {
+	for {
+		currentSideChainHeight, err := this.sideSdk.GetCurrentBlockHeight()
+		if err != nil {
+			log.Errorf("[ProcessToAllianceWaiting] this.sideSdk.GetCurrentBlockHeight error:", err)
+		}
+		if currentSideChainHeight%10 == 0 {
+			waiting, err := this.db.GetWaitingAndDelete(currentSideChainHeight)
+			if err != nil {
+				log.Errorf("[ProcessToAllianceWaiting] this.db.GetWaitingAndDelete error:%s", err)
+			}
+			for height, key := range waiting {
+				err := this.syncProofToAlia(key, height)
+				if err != nil {
+					log.Errorf("[ProcessToAllianceWaiting] this.syncProofToAlia error:%s", err)
+				}
+			}
+		}
+	}
 }

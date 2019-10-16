@@ -19,6 +19,7 @@
 package common
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	asdk "github.com/ontio/multi-chain-go-sdk"
@@ -70,4 +71,30 @@ func ConcatKey(args ...[]byte) []byte {
 		temp = append(temp, arg...)
 	}
 	return temp
+}
+
+func GetUint32Bytes(num uint32) []byte {
+	var p [4]byte
+	binary.LittleEndian.PutUint32(p[:], num)
+	return p[:]
+}
+
+func GetBytesUint32(b []byte) uint32 {
+	if len(b) != 4 {
+		return 0
+	}
+	return binary.LittleEndian.Uint32(b[:])
+}
+
+func GetBytesUint64(b []byte) uint64 {
+	if len(b) != 8 {
+		return 0
+	}
+	return binary.LittleEndian.Uint64(b[:])
+}
+
+func GetUint64Bytes(num uint64) []byte {
+	var p [8]byte
+	binary.LittleEndian.PutUint64(p[:], num)
+	return p[:]
 }
