@@ -40,7 +40,8 @@ type Config struct {
 	SideJsonRpcAddress string
 	AliaChainID        uint64
 	SideChainID        uint64
-	WalletFile         string
+	SideWalletFile     string
+	AliaWalletFile     string
 	GasPrice           uint64
 	GasLimit           uint64
 }

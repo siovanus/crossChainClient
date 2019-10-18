@@ -72,12 +72,12 @@ func startSync(ctx *cli.Context) {
 	aliaSdk.NewRpcClient().SetAddress(config.DefConfig.AliaJsonRpcAddress)
 	sideSdk := sdk.NewOntologySdk()
 	sideSdk.NewRpcClient().SetAddress(config.DefConfig.SideJsonRpcAddress)
-	aliaAccount, ok := common.GetAliaAccountByPassword(aliaSdk, config.DefConfig.WalletFile)
+	aliaAccount, ok := common.GetAliaAccountByPassword(aliaSdk, config.DefConfig.AliaWalletFile)
 	if !ok {
 		fmt.Println("common.GetAccountByPassword error")
 		return
 	}
-	sideAccount, ok := common.GetSideAccountByPassword(sideSdk, config.DefConfig.WalletFile)
+	sideAccount, ok := common.GetSideAccountByPassword(sideSdk, config.DefConfig.SideWalletFile)
 	if !ok {
 		fmt.Println("common.GetAccountByPassword error")
 		return

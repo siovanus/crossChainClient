@@ -10,10 +10,8 @@ import (
 	asdk "github.com/ontio/multi-chain-go-sdk"
 	"github.com/ontio/multi-chain/common"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
-	aont "github.com/ontio/multi-chain/native/service/cross_chain_manager/ont"
 	autils "github.com/ontio/multi-chain/native/service/utils"
 	sdk "github.com/ontio/ontology-go-sdk"
-	"github.com/ontio/ontology/smartcontract/service/native/cross_chain"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
 
@@ -29,7 +27,7 @@ type SyncService struct {
 }
 
 func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk *asdk.MultiChainSdk, sideSdk *sdk.OntologySdk) *SyncService {
-	boltDB, err := db.NewWaitingDB("data")
+	boltDB, err := db.NewWaitingDB("boltdb")
 	if err != nil {
 		log.Errorf("db.NewWaitingDB error:%s", err)
 		os.Exit(1)
@@ -97,7 +95,7 @@ func (this *SyncService) AllianceToSide() {
 						continue
 					}
 					name := states[0].(string)
-					if name == aont.MAKE_TO_ONT_PROOF {
+					if name == "makeToOntProof" {
 						key := states[4].(string)
 						err = this.syncHeaderToSide(i + 1)
 						if err != nil {
@@ -161,7 +159,7 @@ func (this *SyncService) SideToAlliance() {
 						continue
 					}
 					name := states[0].(string)
-					if name == cross_chain.MAKE_FROM_ONT_PROOF {
+					if name == "makeFromOntProof" {
 						key := states[4].(string)
 						err = this.syncHeaderToAlia(i + 1)
 						if err != nil {
