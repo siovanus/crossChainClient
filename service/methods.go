@@ -83,7 +83,7 @@ func (this *SyncService) syncHeaderToAlia(height uint32) error {
 	return nil
 }
 
-func (this *SyncService) syncProofToAlia(key string, height uint32) error {
+func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32) error {
 	k, err := hex.DecodeString(key)
 	if err != nil {
 		return fmt.Errorf("[syncProofToAlia] hex.DecodeString error: %s", err)
@@ -92,9 +92,13 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 	if err != nil {
 		return fmt.Errorf("[syncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
 	}
+	auditPath, err := hex.DecodeString(proof.AuditPath)
+	if err != nil {
+		return fmt.Errorf("[syncProofToAlia] hex.DecodeString error: %s", err)
+	}
 
-	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height+1, proof.AuditPath,
-		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
+	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), hash, nil, height+1, auditPath,
+		this.aliaAccount.Address[:], this.aliaAccount)
 	if err != nil {
 		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
 			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
@@ -103,6 +107,7 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 			}
 			waiting := &db.Waiting{
 				AliaChainHeight: aliaChainHeight,
+				TxHash:          hash,
 				Height:          height,
 				Key:             key,
 			}
@@ -122,7 +127,7 @@ func (this *SyncService) syncProofToAlia(key string, height uint32) error {
 	return nil
 }
 
-func (this *SyncService) retrySyncProofToAlia(key string, height uint32) (bool, error) {
+func (this *SyncService) retrySyncProofToAlia(hash []byte, key string, height uint32) (bool, error) {
 	k, err := hex.DecodeString(key)
 	if err != nil {
 		return false, fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
@@ -131,9 +136,13 @@ func (this *SyncService) retrySyncProofToAlia(key string, height uint32) (bool, 
 	if err != nil {
 		return false, fmt.Errorf("[retrySyncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
 	}
+	auditPath, err := hex.DecodeString(proof.AuditPath)
+	if err != nil {
+		return false, fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
+	}
 
-	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), "", height+1, proof.AuditPath,
-		this.aliaAccount.Address.ToBase58(), this.GetAliaChainID(), "", this.aliaAccount)
+	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), hash, nil, height+1, auditPath,
+		this.aliaAccount.Address[:], this.aliaAccount)
 	if err != nil {
 		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
 			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()

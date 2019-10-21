@@ -150,6 +150,11 @@ func (this *SyncService) SideToAlliance() {
 				break
 			}
 			for _, event := range events {
+				txHash, err := common.Uint256FromHexString(event.TxHash)
+				if err != nil {
+					log.Errorf("[SideToAlliance] common.Uint256FromHexString error:%s", err)
+					break
+				}
 				for _, notify := range event.Notify {
 					states, ok := notify.States.([]interface{})
 					if !ok {
@@ -165,7 +170,7 @@ func (this *SyncService) SideToAlliance() {
 						if err != nil {
 							log.Errorf("[SideToAlliance] this.syncHeaderToAlia error:%s", err)
 						}
-						err := this.syncProofToAlia(key, i)
+						err := this.syncProofToAlia(txHash[:], key, i)
 						if err != nil {
 							log.Errorf("[SideToAlliance] this.syncProofToAlia error:%s", err)
 						}
@@ -189,7 +194,7 @@ func (this *SyncService) ProcessToAllianceWaiting() {
 				log.Errorf("[ProcessToAllianceWaiting] this.db.GetWaitingAndDelete error:%s", err)
 			}
 			for _, waiting := range waitingList {
-				ok, err := this.retrySyncProofToAlia(waiting.Key, waiting.Height)
+				ok, err := this.retrySyncProofToAlia(waiting.TxHash, waiting.Key, waiting.Height)
 				if err != nil {
 					log.Errorf("[ProcessToAllianceWaiting] this.retrySyncProofToAlia error:%s", err)
 				}
