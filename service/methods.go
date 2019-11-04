@@ -118,7 +118,7 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 			if err != nil {
 				log.Errorf("[syncProofToAlia] this.db.Put error: %s", err)
 			}
-			log.Infof("[syncProofToAlia] put tx into waiting db, height %d, key %s", height, key)
+			log.Infof("[syncProofToAlia] put tx into waiting db, height %d, key %s, hash %x", height, key, hash)
 			return nil
 		} else {
 			return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
@@ -153,6 +153,7 @@ func (this *SyncService) retrySyncProofToAlia(hash []byte, key string, height ui
 			}
 			waiting := &db.Waiting{
 				AliaChainHeight: aliaChainHeight,
+				TxHash:          hash,
 				Height:          height,
 				Key:             key,
 			}
@@ -162,7 +163,7 @@ func (this *SyncService) retrySyncProofToAlia(hash []byte, key string, height ui
 			if err != nil {
 				log.Errorf("[retrySyncProofToAlia] this.db.Put error: %s", err)
 			}
-			log.Infof("[retrySyncProofToAlia] remain tx in waiting db, height %d, key %s", height, key)
+			log.Infof("[retrySyncProofToAlia] remain tx in waiting db, height %d, key %s, hash %x", height, key, hash)
 			return false, nil
 		} else {
 			return true, fmt.Errorf("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
