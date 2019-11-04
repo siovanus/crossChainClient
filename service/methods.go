@@ -101,6 +101,7 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 		this.aliaAccount.Address[:], this.aliaAccount)
 	if err != nil {
 		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
+			log.Infof("[syncProofToAlia] invokeNativeContract error: %s", err)
 			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
 			if err != nil {
 				log.Errorf("[syncProofToAlia] this.mainSdk.GetCurrentBlockHeight error:", err)
@@ -145,6 +146,7 @@ func (this *SyncService) retrySyncProofToAlia(hash []byte, key string, height ui
 		this.aliaAccount.Address[:], this.aliaAccount)
 	if err != nil {
 		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
+			log.Infof("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
 			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
 			if err != nil {
 				log.Errorf("[retrySyncProofToAlia] this.mainSdk.GetCurrentBlockHeight error:", err)
