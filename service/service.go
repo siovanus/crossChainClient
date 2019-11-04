@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 
+	"github.com/ontio/ontology/smartcontract/service/native/utils"
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
@@ -12,7 +13,6 @@ import (
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
 	autils "github.com/ontio/multi-chain/native/service/utils"
 	sdk "github.com/ontio/ontology-go-sdk"
-	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
 
 type SyncService struct {
