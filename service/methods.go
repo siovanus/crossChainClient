@@ -115,14 +115,14 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 			if err != nil {
 				log.Errorf("[syncProofToAlia] this.db.PutRetry error: %s", err)
 			}
-			log.Infof("[syncProofToAlia] put tx into waiting db, height %d, key %s, hash %x", height, key, hash)
+			log.Infof("[syncProofToAlia] put tx into retry db, height %d, key %s, hash %x", height, key, hash)
 			return nil
 		} else {
 			return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
 		}
 	}
 
-	err = this.db.PutCheck(txHash[:], sink.Bytes())
+	err = this.db.PutCheck(txHash.ToHexString(), sink.Bytes())
 	if err != nil {
 		log.Errorf("[syncProofToAlia] this.db.PutCheck error: %s", err)
 	}
@@ -188,8 +188,13 @@ func (this *SyncService) checkDoneTx() error {
 	}
 	for k, v := range checkMap {
 		event, err := this.aliaSdk.GetSmartContractEvent(k)
-		if err != nil {
-			log.Errorf("[checkDoneTx] this.aliaSdk.GetSmartContractEvent error:%s", err)
+		if event == nil {
+			log.Infof("[checkDoneTx] can not find event of hash %s", k)
+			err = this.db.PutCheck(k, v)
+			if err != nil {
+				log.Errorf("[syncProofToAlia] this.db.PutCheck error: %s", err)
+			}
+			continue
 		}
 		if event.State != 1 {
 			err := this.db.PutRetry(v)

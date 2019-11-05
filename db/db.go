@@ -2,7 +2,6 @@ package db
 
 import (
 	"encoding/hex"
-	"github.com/ontio/ontology/common"
 	"path"
 	"strings"
 	"sync"
@@ -59,13 +58,17 @@ func NewBoltDB(filePath string) (*BoltDB, error) {
 	return w, nil
 }
 
-func (w *BoltDB) PutCheck(txHash []byte, v []byte) error {
+func (w *BoltDB) PutCheck(txHash string, v []byte) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	return w.db.Update(func(btx *bolt.Tx) error {
 		bucket := btx.Bucket(BKTCheck)
-		err := bucket.Put(txHash, v)
+		k, err := hex.DecodeString(txHash)
+		if err != nil {
+			return err
+		}
+		err = bucket.Put(k, v)
 		if err != nil {
 			return err
 		}
@@ -94,18 +97,22 @@ func (w *BoltDB) GetAllCheck() (map[string][]byte, error) {
 	defer w.lock.Unlock()
 
 	checkMap := make(map[string][]byte)
+	removeList := make([][]byte, 0)
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTCheck)
 		err := bw.ForEach(func(k, v []byte) error {
-			checkMap[hex.EncodeToString(common.ToArrayReverse(k))] = v
-			err := bw.Delete(k)
-			if err != nil {
-				return err
-			}
+			checkMap[hex.EncodeToString(k)] = v
+			removeList = append(removeList, k)
 			return nil
 		})
 		if err != nil {
 			return err
+		}
+		for _, k := range removeList {
+			err = bw.Delete(k)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -120,18 +127,22 @@ func (w *BoltDB) GetAllRetry() ([][]byte, error) {
 	defer w.lock.Unlock()
 
 	retryList := make([][]byte, 0)
+	removeList := make([][]byte, 0)
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTRetry)
 		err := bw.ForEach(func(k, _ []byte) error {
 			retryList = append(retryList, k)
-			err := bw.Delete(k)
-			if err != nil {
-				return err
-			}
+			removeList = append(removeList, k)
 			return nil
 		})
 		if err != nil {
 			return err
+		}
+		for _, k := range removeList {
+			err = bw.Delete(k)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
