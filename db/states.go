@@ -5,25 +5,19 @@ import (
 	"github.com/ontio/multi-chain/common"
 )
 
-type Waiting struct {
-	AliaChainHeight uint32
-	TxHash          []byte
-	Height          uint32
-	Key             string
+type Retry struct {
+	TxHash []byte
+	Height uint32
+	Key    string
 }
 
-func (this *Waiting) Serialization(sink *common.ZeroCopySink) {
-	sink.WriteUint32(this.AliaChainHeight)
+func (this *Retry) Serialization(sink *common.ZeroCopySink) {
 	sink.WriteVarBytes(this.TxHash)
 	sink.WriteUint32(this.Height)
 	sink.WriteString(this.Key)
 }
 
-func (this *Waiting) Deserialization(source *common.ZeroCopySource) error {
-	aliaChainHeight, eof := source.NextUint32()
-	if eof {
-		return fmt.Errorf("Waiting deserialize aliaChainHeight error")
-	}
+func (this *Retry) Deserialization(source *common.ZeroCopySource) error {
 	txHash, eof := source.NextVarBytes()
 	if eof {
 		return fmt.Errorf("Waiting deserialize txHash error")
@@ -37,7 +31,6 @@ func (this *Waiting) Deserialization(source *common.ZeroCopySource) error {
 		return fmt.Errorf("Waiting deserialize key error")
 	}
 
-	this.AliaChainHeight = aliaChainHeight
 	this.TxHash = txHash
 	this.Height = height
 	this.Key = key

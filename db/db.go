@@ -1,29 +1,31 @@
 package db
 
 import (
+	"encoding/hex"
+	"github.com/ontio/ontology/common"
 	"path"
 	"strings"
 	"sync"
 
 	"github.com/boltdb/bolt"
-	"github.com/ontio/multi-chain/common"
 )
 
 var (
-	BKTWaiting = []byte("Waiting")
+	BKTCheck = []byte("Check")
+	BKTRetry = []byte("Retry")
 )
 
-type WaitingDB struct {
+type BoltDB struct {
 	lock     *sync.Mutex
 	db       *bolt.DB
 	filePath string
 }
 
-func NewWaitingDB(filePath string) (*WaitingDB, error) {
+func NewBoltDB(filePath string) (*BoltDB, error) {
 	if !strings.Contains(filePath, ".bin") {
-		filePath = path.Join(filePath, "waiting.bin")
+		filePath = path.Join(filePath, "bolt.bin")
 	}
-	w := new(WaitingDB)
+	w := new(BoltDB)
 	db, err := bolt.Open(filePath, 0644, &bolt.Options{InitialMmapSize: 500000})
 	if err != nil {
 		return nil, err
@@ -33,7 +35,18 @@ func NewWaitingDB(filePath string) (*WaitingDB, error) {
 	w.filePath = filePath
 
 	if err = db.Update(func(btx *bolt.Tx) error {
-		_, err := btx.CreateBucketIfNotExists(BKTWaiting)
+		_, err := btx.CreateBucketIfNotExists(BKTCheck)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err = db.Update(func(btx *bolt.Tx) error {
+		_, err := btx.CreateBucketIfNotExists(BKTRetry)
 		if err != nil {
 			return err
 		}
@@ -46,12 +59,27 @@ func NewWaitingDB(filePath string) (*WaitingDB, error) {
 	return w, nil
 }
 
-func (w *WaitingDB) Put(k []byte) error {
+func (w *BoltDB) PutCheck(txHash []byte, v []byte) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	return w.db.Update(func(btx *bolt.Tx) error {
-		bucket := btx.Bucket(BKTWaiting)
+		bucket := btx.Bucket(BKTCheck)
+		err := bucket.Put(txHash, v)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (w *BoltDB) PutRetry(k []byte) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	return w.db.Update(func(btx *bolt.Tx) error {
+		bucket := btx.Bucket(BKTRetry)
 		err := bucket.Put(k, []byte{0x00})
 		if err != nil {
 			return err
@@ -61,38 +89,18 @@ func (w *WaitingDB) Put(k []byte) error {
 	})
 }
 
-func (w *WaitingDB) Delete(k []byte) error {
+func (w *BoltDB) GetAllCheck() (map[string][]byte, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	return w.db.Update(func(btx *bolt.Tx) error {
-		bucket := btx.Bucket(BKTWaiting)
-		err := bucket.Delete(k)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-}
-
-func (w *WaitingDB) GetWaitingAndDelete(h uint32) ([]*Waiting, error) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-
-	deleteList := make([][]byte, 0)
-	waitingList := make([]*Waiting, 0)
+	checkMap := make(map[string][]byte)
 	err := w.db.Update(func(tx *bolt.Tx) error {
-		bw := tx.Bucket(BKTWaiting)
-		err := bw.ForEach(func(k, _ []byte) error {
-			waiting := new(Waiting)
-			err := waiting.Deserialization(common.NewZeroCopySource(k))
+		bw := tx.Bucket(BKTCheck)
+		err := bw.ForEach(func(k, v []byte) error {
+			checkMap[hex.EncodeToString(common.ToArrayReverse(k))] = v
+			err := bw.Delete(k)
 			if err != nil {
 				return err
-			}
-			waitingList = append(waitingList, waiting)
-			if waiting.AliaChainHeight <= h-50 {
-				deleteList = append(deleteList, k)
 			}
 			return nil
 		})
@@ -104,10 +112,36 @@ func (w *WaitingDB) GetWaitingAndDelete(h uint32) ([]*Waiting, error) {
 	if err != nil {
 		return nil, err
 	}
-	return waitingList, nil
+	return checkMap, nil
 }
 
-func (w *WaitingDB) Close() {
+func (w *BoltDB) GetAllRetry() ([][]byte, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	retryList := make([][]byte, 0)
+	err := w.db.Update(func(tx *bolt.Tx) error {
+		bw := tx.Bucket(BKTRetry)
+		err := bw.ForEach(func(k, _ []byte) error {
+			retryList = append(retryList, k)
+			err := bw.Delete(k)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return retryList, nil
+}
+
+func (w *BoltDB) Close() {
 	w.lock.Lock()
 	w.db.Close()
 	w.lock.Unlock()

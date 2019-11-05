@@ -97,26 +97,23 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 		return fmt.Errorf("[syncProofToAlia] hex.DecodeString error: %s", err)
 	}
 
+	retry := &db.Retry{
+		TxHash: hash,
+		Height: height,
+		Key:    key,
+	}
+	sink := acommon.NewZeroCopySink(nil)
+	retry.Serialization(sink)
+
 	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), hash, nil, height+1, auditPath,
 		this.aliaAccount.Address[:], this.aliaAccount)
 	if err != nil {
 		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
 			log.Infof("[syncProofToAlia] invokeNativeContract error: %s", err)
-			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
+
+			err = this.db.PutRetry(sink.Bytes())
 			if err != nil {
-				log.Errorf("[syncProofToAlia] this.mainSdk.GetCurrentBlockHeight error:", err)
-			}
-			waiting := &db.Waiting{
-				AliaChainHeight: aliaChainHeight,
-				TxHash:          hash,
-				Height:          height,
-				Key:             key,
-			}
-			sink := acommon.NewZeroCopySink(nil)
-			waiting.Serialization(sink)
-			err = this.db.Put(sink.Bytes())
-			if err != nil {
-				log.Errorf("[syncProofToAlia] this.db.Put error: %s", err)
+				log.Errorf("[syncProofToAlia] this.db.PutRetry error: %s", err)
 			}
 			log.Infof("[syncProofToAlia] put tx into waiting db, height %d, key %s, hash %x", height, key, hash)
 			return nil
@@ -124,53 +121,14 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 			return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
 		}
 	}
+
+	err = this.db.PutCheck(txHash[:], sink.Bytes())
+	if err != nil {
+		log.Errorf("[syncProofToAlia] this.db.PutCheck error: %s", err)
+	}
+
 	log.Infof("[syncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
 	return nil
-}
-
-func (this *SyncService) retrySyncProofToAlia(hash []byte, key string, height uint32) (bool, error) {
-	k, err := hex.DecodeString(key)
-	if err != nil {
-		return false, fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
-	}
-	proof, err := this.sideSdk.GetCrossStatesProof(height, k)
-	if err != nil {
-		return false, fmt.Errorf("[retrySyncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
-	}
-	auditPath, err := hex.DecodeString(proof.AuditPath)
-	if err != nil {
-		return false, fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
-	}
-
-	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), hash, nil, height+1, auditPath,
-		this.aliaAccount.Address[:], this.aliaAccount)
-	if err != nil {
-		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
-			log.Infof("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
-			aliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
-			if err != nil {
-				log.Errorf("[retrySyncProofToAlia] this.mainSdk.GetCurrentBlockHeight error:", err)
-			}
-			waiting := &db.Waiting{
-				AliaChainHeight: aliaChainHeight,
-				TxHash:          hash,
-				Height:          height,
-				Key:             key,
-			}
-			sink := acommon.NewZeroCopySink(nil)
-			waiting.Serialization(sink)
-			err = this.db.Put(sink.Bytes())
-			if err != nil {
-				log.Errorf("[retrySyncProofToAlia] this.db.Put error: %s", err)
-			}
-			log.Infof("[retrySyncProofToAlia] remain tx in waiting db, height %d, key %s, hash %x", height, key, hash)
-			return false, nil
-		} else {
-			return true, fmt.Errorf("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
-		}
-	}
-	log.Infof("[retrySyncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
-	return true, nil
 }
 
 func (this *SyncService) syncHeaderToSide(height uint32) error {
@@ -220,6 +178,48 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 		return fmt.Errorf("[syncProofToSide] invokeNativeContract error: %s", err)
 	}
 	log.Infof("[syncProofToSide] syncProofToSide txHash is :", txHash.ToHexString())
+	return nil
+}
+
+func (this *SyncService) checkDoneTx() error {
+	checkMap, err := this.db.GetAllCheck()
+	if err != nil {
+		return fmt.Errorf("[checkDoneTx] this.db.GetAllCheck error: %s", err)
+	}
+	for k, v := range checkMap {
+		event, err := this.aliaSdk.GetSmartContractEvent(k)
+		if err != nil {
+			log.Errorf("[checkDoneTx] this.aliaSdk.GetSmartContractEvent error:%s", err)
+		}
+		if event.State != 1 {
+			err := this.db.PutRetry(v)
+			if err != nil {
+				log.Errorf("[checkDoneTx] this.db.PutRetry error:%s", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (this *SyncService) retryTx() error {
+	retryList, err := this.db.GetAllRetry()
+	if err != nil {
+		return fmt.Errorf("[retryTx] this.db.GetAllRetry error: %s", err)
+	}
+	for _, v := range retryList {
+		retry := new(db.Retry)
+		err := retry.Deserialization(acommon.NewZeroCopySource(v))
+		if err != nil {
+			log.Errorf("[retryTx] retry.Deserialization error: %s", err)
+			continue
+		}
+		err = this.syncProofToAlia(retry.TxHash, retry.Key, retry.Height)
+		if err != nil {
+			log.Errorf("[retryTx] this.syncProofToAlia error:%s", err)
+		}
+	}
+
 	return nil
 }
 

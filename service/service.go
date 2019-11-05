@@ -3,16 +3,17 @@ package service
 import (
 	"encoding/json"
 	"os"
+	"time"
 
-	"github.com/ontio/ontology/smartcontract/service/native/utils"
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
 	asdk "github.com/ontio/multi-chain-go-sdk"
-	"github.com/ontio/multi-chain/common"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
 	autils "github.com/ontio/multi-chain/native/service/utils"
 	sdk "github.com/ontio/ontology-go-sdk"
+	"github.com/ontio/ontology/common"
+	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
 
 type SyncService struct {
@@ -22,12 +23,12 @@ type SyncService struct {
 	sideAccount    *sdk.Account
 	sideSdk        *sdk.OntologySdk
 	sideSyncHeight uint32
-	db             *db.WaitingDB
+	db             *db.BoltDB
 	config         *config.Config
 }
 
 func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk *asdk.MultiChainSdk, sideSdk *sdk.OntologySdk) *SyncService {
-	boltDB, err := db.NewWaitingDB("boltdb")
+	boltDB, err := db.NewBoltDB("boltdb")
 	if err != nil {
 		log.Errorf("db.NewWaitingDB error:%s", err)
 		os.Exit(1)
@@ -46,7 +47,7 @@ func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk
 func (this *SyncService) Run() {
 	go this.SideToAlliance()
 	go this.AllianceToSide()
-	go this.ProcessToAllianceWaiting()
+	go this.ProcessToAllianceCheckAndRetry()
 }
 
 func (this *SyncService) AllianceToSide() {
@@ -182,30 +183,18 @@ func (this *SyncService) SideToAlliance() {
 	}
 }
 
-func (this *SyncService) ProcessToAllianceWaiting() {
+func (this *SyncService) ProcessToAllianceCheckAndRetry() {
+	ticker := time.NewTicker(60 * time.Second)
 	for {
-		currentAliaChainHeight, err := this.aliaSdk.GetCurrentBlockHeight()
-		if err != nil {
-			log.Errorf("[ProcessToAllianceWaiting] this.mainSdk.GetCurrentBlockHeight error:", err)
-		}
-		if currentAliaChainHeight%10 == 0 {
-			waitingList, err := this.db.GetWaitingAndDelete(currentAliaChainHeight)
+		select {
+		case <-ticker.C:
+			err := this.checkDoneTx()
 			if err != nil {
-				log.Errorf("[ProcessToAllianceWaiting] this.db.GetWaitingAndDelete error:%s", err)
+				log.Errorf("[ProcessToAllianceCheckAndRetry] this.checkDoneTx error:%s", err)
 			}
-			for _, waiting := range waitingList {
-				ok, err := this.retrySyncProofToAlia(waiting.TxHash, waiting.Key, waiting.Height)
-				if err != nil {
-					log.Errorf("[ProcessToAllianceWaiting] this.retrySyncProofToAlia error:%s", err)
-				}
-				sink := common.NewZeroCopySink(nil)
-				waiting.Serialization(sink)
-				if ok {
-					err := this.db.Delete(sink.Bytes())
-					if err != nil {
-						log.Errorf("[ProcessToAllianceWaiting] this.db.Delete error:%s", err)
-					}
-				}
+			err = this.retryTx()
+			if err != nil {
+				log.Errorf("[ProcessToAllianceCheckAndRetry] this.retryTx error:%s", err)
 			}
 		}
 	}
