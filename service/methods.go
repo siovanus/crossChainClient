@@ -197,6 +197,7 @@ func (this *SyncService) checkDoneTx() error {
 			continue
 		}
 		if event.State != 1 {
+			log.Infof("[checkDoneTx] state of tx %s is not success", k)
 			err := this.db.PutRetry(v)
 			if err != nil {
 				log.Errorf("[checkDoneTx] this.db.PutRetry error:%s", err)

@@ -101,7 +101,11 @@ func (w *BoltDB) GetAllCheck() (map[string][]byte, error) {
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTCheck)
 		err := bw.ForEach(func(k, v []byte) error {
-			checkMap[hex.EncodeToString(k)] = v
+			_k := make([]byte, len(k))
+			_v := make([]byte, len(v))
+			copy(_k, k)
+			copy(_v, v)
+			checkMap[hex.EncodeToString(_k)] = _v
 			removeList = append(removeList, k)
 			return nil
 		})
@@ -131,7 +135,9 @@ func (w *BoltDB) GetAllRetry() ([][]byte, error) {
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTRetry)
 		err := bw.ForEach(func(k, _ []byte) error {
-			retryList = append(retryList, k)
+			_k := make([]byte, len(k))
+			copy(_k, k)
+			retryList = append(retryList, _k)
 			removeList = append(removeList, k)
 			return nil
 		})
