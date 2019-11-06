@@ -2,9 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"os"
-	"time"
-
 	"github.com/ontio/crossChainClient/config"
 	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
@@ -14,6 +11,7 @@ import (
 	sdk "github.com/ontio/ontology-go-sdk"
 	"github.com/ontio/ontology/common"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
+	"os"
 )
 
 type SyncService struct {
@@ -184,18 +182,14 @@ func (this *SyncService) SideToAlliance() {
 }
 
 func (this *SyncService) ProcessToAllianceCheckAndRetry() {
-	ticker := time.NewTicker(60 * time.Second)
 	for {
-		select {
-		case <-ticker.C:
-			err := this.checkDoneTx()
-			if err != nil {
-				log.Errorf("[ProcessToAllianceCheckAndRetry] this.checkDoneTx error:%s", err)
-			}
-			err = this.retryTx()
-			if err != nil {
-				log.Errorf("[ProcessToAllianceCheckAndRetry] this.retryTx error:%s", err)
-			}
+		err := this.checkDoneTx()
+		if err != nil {
+			log.Errorf("[ProcessToAllianceCheckAndRetry] this.checkDoneTx error:%s", err)
+		}
+		err = this.retryTx()
+		if err != nil {
+			log.Errorf("[ProcessToAllianceCheckAndRetry] this.retryTx error:%s", err)
 		}
 	}
 }

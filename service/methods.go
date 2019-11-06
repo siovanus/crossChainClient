@@ -224,6 +224,7 @@ func (this *SyncService) retryTx() error {
 		if err != nil {
 			log.Errorf("[retryTx] this.syncProofToAlia error:%s", err)
 		}
+		time.Sleep(1 * time.Second)
 	}
 
 	return nil
