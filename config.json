@@ -5,6 +5,7 @@
   "SideChainID": 2,
   "AliaWalletFile": "./wallet1.dat",
   "SideWalletFile": "./wallet2.dat",
+  "RetryInterval": 1,
   "GasPrice":0,
   "GasLimit":200000
 }
