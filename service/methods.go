@@ -3,11 +3,11 @@ package service
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/ontio/crossChainClient/db"
 	"strings"
 	"time"
 
 	"github.com/ontio/crossChainClient/common"
+	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
 	acommon "github.com/ontio/multi-chain/common"
 	autils "github.com/ontio/multi-chain/native/service/utils"
@@ -131,6 +131,52 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 	return nil
 }
 
+func (this *SyncService) retrySyncProofToAlia(v []byte) error {
+	retry := new(db.Retry)
+	err := retry.Deserialization(acommon.NewZeroCopySource(v))
+	if err != nil {
+		return fmt.Errorf("[retryTx] retry.Deserialization error: %s", err)
+	}
+	k, err := hex.DecodeString(retry.Key)
+	if err != nil {
+		return fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
+	}
+	proof, err := this.sideSdk.GetCrossStatesProof(retry.Height, k)
+	if err != nil {
+		return fmt.Errorf("[retrySyncProofToAlia] this.sideSdk.GetCrossStatesProof error: %s", err)
+	}
+	auditPath, err := hex.DecodeString(proof.AuditPath)
+	if err != nil {
+		return fmt.Errorf("[retrySyncProofToAlia] hex.DecodeString error: %s", err)
+	}
+
+	txHash, err := this.aliaSdk.Native.Ccm.ImportOuterTransfer(this.GetSideChainID(), retry.TxHash,
+		nil, retry.Height+1, auditPath, this.aliaAccount.Address[:], this.aliaAccount)
+	if err != nil {
+		if strings.Contains(err.Error(), "chooseUtxos, current utxo is not enough") {
+			log.Infof("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
+			return nil
+		} else {
+			if err := this.db.DeleteRetry(v); err != nil {
+				log.Errorf("[retrySyncProofToAlia] this.db.DeleteRetry error: %s", err)
+			}
+			return fmt.Errorf("[retrySyncProofToAlia] invokeNativeContract error: %s", err)
+		}
+	}
+
+	err = this.db.PutCheck(txHash.ToHexString(), v)
+	if err != nil {
+		log.Errorf("[retrySyncProofToAlia] this.db.PutCheck error: %s", err)
+	}
+	err = this.db.DeleteRetry(v)
+	if err != nil {
+		log.Errorf("[retrySyncProofToAlia] this.db.PutCheck error: %s", err)
+	}
+
+	log.Infof("[retrySyncProofToAlia] syncProofToAlia txHash is :", txHash.ToHexString())
+	return nil
+}
+
 func (this *SyncService) syncHeaderToSide(height uint32) error {
 	chainIDBytes := common.GetUint64Bytes(this.GetAliaChainID())
 	heightBytes := common.GetUint32Bytes(height)
@@ -188,12 +234,11 @@ func (this *SyncService) checkDoneTx() error {
 	}
 	for k, v := range checkMap {
 		event, err := this.aliaSdk.GetSmartContractEvent(k)
+		if err != nil {
+			return fmt.Errorf("[checkDoneTx] this.aliaSdk.GetSmartContractEvent error: %s", err)
+		}
 		if event == nil {
 			log.Infof("[checkDoneTx] can not find event of hash %s", k)
-			err = this.db.PutCheck(k, v)
-			if err != nil {
-				log.Errorf("[syncProofToAlia] this.db.PutCheck error: %s", err)
-			}
 			continue
 		}
 		if event.State != 1 {
@@ -201,6 +246,11 @@ func (this *SyncService) checkDoneTx() error {
 			err := this.db.PutRetry(v)
 			if err != nil {
 				log.Errorf("[checkDoneTx] this.db.PutRetry error:%s", err)
+			}
+		} else {
+			err := this.db.DeleteCheck(k)
+			if err != nil {
+				log.Errorf("[checkDoneTx] this.db.DeleteRetry error:%s", err)
 			}
 		}
 	}
@@ -214,15 +264,9 @@ func (this *SyncService) retryTx() error {
 		return fmt.Errorf("[retryTx] this.db.GetAllRetry error: %s", err)
 	}
 	for _, v := range retryList {
-		retry := new(db.Retry)
-		err := retry.Deserialization(acommon.NewZeroCopySource(v))
+		err = this.retrySyncProofToAlia(v)
 		if err != nil {
-			log.Errorf("[retryTx] retry.Deserialization error: %s", err)
-			continue
-		}
-		err = this.syncProofToAlia(retry.TxHash, retry.Key, retry.Height)
-		if err != nil {
-			log.Errorf("[retryTx] this.syncProofToAlia error:%s", err)
+			log.Errorf("[retryTx] this.retrySyncProofToAlia error:%s", err)
 		}
 		time.Sleep(time.Duration(this.config.RetryInterval) * time.Second)
 	}

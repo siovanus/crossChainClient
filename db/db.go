@@ -2,6 +2,8 @@ package db
 
 import (
 	"encoding/hex"
+	"fmt"
+	"github.com/ontio/crossChainClient/log"
 	"path"
 	"strings"
 	"sync"
@@ -9,13 +11,15 @@ import (
 	"github.com/boltdb/bolt"
 )
 
+const MAX_NUM = 1000
+
 var (
 	BKTCheck = []byte("Check")
 	BKTRetry = []byte("Retry")
 )
 
 type BoltDB struct {
-	lock     *sync.Mutex
+	rwlock   *sync.RWMutex
 	db       *bolt.DB
 	filePath string
 }
@@ -30,7 +34,7 @@ func NewBoltDB(filePath string) (*BoltDB, error) {
 		return nil, err
 	}
 	w.db = db
-	w.lock = new(sync.Mutex)
+	w.rwlock = new(sync.RWMutex)
 	w.filePath = filePath
 
 	if err = db.Update(func(btx *bolt.Tx) error {
@@ -59,16 +63,16 @@ func NewBoltDB(filePath string) (*BoltDB, error) {
 }
 
 func (w *BoltDB) PutCheck(txHash string, v []byte) error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+	w.rwlock.Lock()
+	defer w.rwlock.Unlock()
 
+	k, err := hex.DecodeString(txHash)
+	if err != nil {
+		return err
+	}
 	return w.db.Update(func(btx *bolt.Tx) error {
 		bucket := btx.Bucket(BKTCheck)
-		k, err := hex.DecodeString(txHash)
-		if err != nil {
-			return err
-		}
-		err = bucket.Put(k, v)
+		err := bucket.Put(k, v)
 		if err != nil {
 			return err
 		}
@@ -77,9 +81,27 @@ func (w *BoltDB) PutCheck(txHash string, v []byte) error {
 	})
 }
 
+func (w *BoltDB) DeleteCheck(txHash string) error {
+	w.rwlock.Lock()
+	defer w.rwlock.Unlock()
+
+	k, err := hex.DecodeString(txHash)
+	if err != nil {
+		return err
+	}
+	return w.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(BKTRetry)
+		err := bucket.Delete(k)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func (w *BoltDB) PutRetry(k []byte) error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+	w.rwlock.Lock()
+	defer w.rwlock.Unlock()
 
 	return w.db.Update(func(btx *bolt.Tx) error {
 		bucket := btx.Bucket(BKTRetry)
@@ -92,12 +114,25 @@ func (w *BoltDB) PutRetry(k []byte) error {
 	})
 }
 
+func (w *BoltDB) DeleteRetry(k []byte) error {
+	w.rwlock.Lock()
+	defer w.rwlock.Unlock()
+
+	return w.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(BKTRetry)
+		err := bucket.Delete(k)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func (w *BoltDB) GetAllCheck() (map[string][]byte, error) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+	w.rwlock.Lock()
+	defer w.rwlock.Unlock()
 
 	checkMap := make(map[string][]byte)
-	removeList := make([][]byte, 0)
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTCheck)
 		err := bw.ForEach(func(k, v []byte) error {
@@ -106,17 +141,13 @@ func (w *BoltDB) GetAllCheck() (map[string][]byte, error) {
 			copy(_k, k)
 			copy(_v, v)
 			checkMap[hex.EncodeToString(_k)] = _v
-			removeList = append(removeList, k)
+			if len(checkMap) >= MAX_NUM {
+				return fmt.Errorf("max num")
+			}
 			return nil
 		})
 		if err != nil {
-			return err
-		}
-		for _, k := range removeList {
-			err = bw.Delete(k)
-			if err != nil {
-				return err
-			}
+			log.Errorf("GetAllCheck err: %s", err)
 		}
 		return nil
 	})
@@ -127,28 +158,23 @@ func (w *BoltDB) GetAllCheck() (map[string][]byte, error) {
 }
 
 func (w *BoltDB) GetAllRetry() ([][]byte, error) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+	w.rwlock.Lock()
+	defer w.rwlock.Unlock()
 
 	retryList := make([][]byte, 0)
-	removeList := make([][]byte, 0)
 	err := w.db.Update(func(tx *bolt.Tx) error {
 		bw := tx.Bucket(BKTRetry)
 		err := bw.ForEach(func(k, _ []byte) error {
 			_k := make([]byte, len(k))
 			copy(_k, k)
 			retryList = append(retryList, _k)
-			removeList = append(removeList, k)
+			if len(retryList) >= MAX_NUM {
+				return fmt.Errorf("max num")
+			}
 			return nil
 		})
 		if err != nil {
-			return err
-		}
-		for _, k := range removeList {
-			err = bw.Delete(k)
-			if err != nil {
-				return err
-			}
+			log.Errorf("GetAllRetry err: %s", err)
 		}
 		return nil
 	})
@@ -159,7 +185,7 @@ func (w *BoltDB) GetAllRetry() ([][]byte, error) {
 }
 
 func (w *BoltDB) Close() {
-	w.lock.Lock()
+	w.rwlock.Lock()
 	w.db.Close()
-	w.lock.Unlock()
+	w.rwlock.Unlock()
 }
