@@ -118,7 +118,7 @@ func (this *SyncService) syncProofToAlia(hash []byte, key string, height uint32)
 			log.Infof("[syncProofToAlia] put tx into retry db, height %d, key %s, hash %x", height, key, hash)
 			return nil
 		} else {
-			return fmt.Errorf("[syncProofToAlia] invokeNativeContract error: %s", err)
+			return err
 		}
 	}
 
@@ -221,7 +221,7 @@ func (this *SyncService) syncProofToSide(key string, height uint32) error {
 	txHash, err := this.sideSdk.Native.InvokeNativeContract(this.GetGasPrice(), this.GetGasLimit(), this.sideAccount, codeVersion,
 		contractAddress, method, []interface{}{param})
 	if err != nil {
-		return fmt.Errorf("[syncProofToSide] invokeNativeContract error: %s", err)
+		return err
 	}
 	log.Infof("[syncProofToSide] syncProofToSide txHash is :", txHash.ToHexString())
 	return nil

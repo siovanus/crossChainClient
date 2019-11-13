@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ontio/multi-chain-go-sdk/client"
 	"os"
 	"time"
 
@@ -146,8 +147,11 @@ func (this *SyncService) allianceToSide(m, n uint32) error {
 						return fmt.Errorf("[allianceToSide] this.syncHeaderToSide error:%s", err)
 					}
 					err := this.syncProofToSide(key, i)
-					if err != nil {
+					_, ok := err.(client.PostErr)
+					if ok {
 						return fmt.Errorf("[allianceToSide] this.syncProofToSide error:%s", err)
+					} else {
+						log.Errorf("[allianceToSide] this.syncProofToSide error:%s", err)
 					}
 				}
 			}
@@ -163,7 +167,7 @@ func (this *SyncService) sideToAlliance(m, n uint32) error {
 		//sync key header
 		block, err := this.sideSdk.GetBlockByHeight(i)
 		if err != nil {
-			return fmt.Errorf("[sideToAlliance] this.mainSdk.GetBlockByHeight error:", err)
+			return fmt.Errorf("[sideToAlliance] this.mainSdk.GetBlockByHeight error: %s", err)
 		}
 		blkInfo := &vconfig.VbftBlockInfo{}
 		if err := json.Unmarshal(block.Header.ConsensusPayload, blkInfo); err != nil {
@@ -202,8 +206,11 @@ func (this *SyncService) sideToAlliance(m, n uint32) error {
 						return fmt.Errorf("[sideToAlliance] this.syncHeaderToAlia error:%s", err)
 					}
 					err := this.syncProofToAlia(txHash[:], key, i)
-					if err != nil {
+					_, ok := err.(client.PostErr)
+					if ok {
 						return fmt.Errorf("[sideToAlliance] this.syncProofToAlia error:%s", err)
+					} else {
+						log.Errorf("[sideToAlliance] this.syncProofToAlia error:%s", err)
 					}
 				}
 			}
