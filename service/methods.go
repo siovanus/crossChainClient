@@ -250,7 +250,7 @@ func (this *SyncService) checkDoneTx() error {
 		} else {
 			err := this.db.DeleteCheck(k)
 			if err != nil {
-				log.Errorf("[checkDoneTx] this.db.DeleteRetry error:%s", err)
+				log.Errorf("[checkDoneTx] this.db.DeleteCheck error:%s", err)
 			}
 		}
 	}

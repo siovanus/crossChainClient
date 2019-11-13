@@ -90,7 +90,7 @@ func (w *BoltDB) DeleteCheck(txHash string) error {
 		return err
 	}
 	return w.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(BKTRetry)
+		bucket := tx.Bucket(BKTCheck)
 		err := bucket.Delete(k)
 		if err != nil {
 			return err

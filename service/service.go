@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ontio/multi-chain-go-sdk/client"
 	"os"
 	"time"
 
@@ -11,9 +10,11 @@ import (
 	"github.com/ontio/crossChainClient/db"
 	"github.com/ontio/crossChainClient/log"
 	asdk "github.com/ontio/multi-chain-go-sdk"
+	"github.com/ontio/multi-chain-go-sdk/client"
 	vconfig "github.com/ontio/multi-chain/consensus/vbft/config"
 	autils "github.com/ontio/multi-chain/native/service/utils"
 	sdk "github.com/ontio/ontology-go-sdk"
+	aclient "github.com/ontio/ontology-go-sdk/client"
 	"github.com/ontio/ontology/common"
 	"github.com/ontio/ontology/smartcontract/service/native/utils"
 )
@@ -147,11 +148,13 @@ func (this *SyncService) allianceToSide(m, n uint32) error {
 						return fmt.Errorf("[allianceToSide] this.syncHeaderToSide error:%s", err)
 					}
 					err := this.syncProofToSide(key, i)
-					_, ok := err.(client.PostErr)
-					if ok {
-						return fmt.Errorf("[allianceToSide] this.syncProofToSide error:%s", err)
-					} else {
-						log.Errorf("[allianceToSide] this.syncProofToSide error:%s", err)
+					if err != nil {
+						_, ok := err.(aclient.PostErr)
+						if ok {
+							return fmt.Errorf("[allianceToSide] this.syncProofToSide error:%s", err)
+						} else {
+							log.Errorf("[allianceToSide] this.syncProofToSide error:%s", err)
+						}
 					}
 				}
 			}
@@ -206,11 +209,13 @@ func (this *SyncService) sideToAlliance(m, n uint32) error {
 						return fmt.Errorf("[sideToAlliance] this.syncHeaderToAlia error:%s", err)
 					}
 					err := this.syncProofToAlia(txHash[:], key, i)
-					_, ok := err.(client.PostErr)
-					if ok {
-						return fmt.Errorf("[sideToAlliance] this.syncProofToAlia error:%s", err)
-					} else {
-						log.Errorf("[sideToAlliance] this.syncProofToAlia error:%s", err)
+					if err != nil {
+						_, ok := err.(client.PostErr)
+						if ok {
+							return fmt.Errorf("[sideToAlliance] this.syncProofToAlia error:%s", err)
+						} else {
+							log.Errorf("[sideToAlliance] this.syncProofToAlia error:%s", err)
+						}
 					}
 				}
 			}
