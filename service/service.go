@@ -31,7 +31,10 @@ type SyncService struct {
 }
 
 func NewSyncService(aliaAccount *asdk.Account, sideAccount *sdk.Account, aliaSdk *asdk.MultiChainSdk, sideSdk *sdk.OntologySdk) *SyncService {
-	boltDB, err := db.NewBoltDB("boltdb")
+	if !checkIfExist(config.DefConfig.DBPath) {
+		os.Mkdir(config.DefConfig.DBPath, os.ModePerm)
+	}
+	boltDB, err := db.NewBoltDB(config.DefConfig.DBPath)
 	if err != nil {
 		log.Errorf("db.NewWaitingDB error:%s", err)
 		os.Exit(1)

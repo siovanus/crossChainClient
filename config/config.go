@@ -42,6 +42,7 @@ type Config struct {
 	SideChainID        uint64
 	SideWalletFile     string
 	AliaWalletFile     string
+	DBPath             string
 	ScanInterval       uint64
 	RetryInterval      uint64
 	GasPrice           uint64

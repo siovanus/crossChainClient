@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -247,11 +248,10 @@ func (this *SyncService) checkDoneTx() error {
 			if err != nil {
 				log.Errorf("[checkDoneTx] this.db.PutRetry error:%s", err)
 			}
-		} else {
-			err := this.db.DeleteCheck(k)
-			if err != nil {
-				log.Errorf("[checkDoneTx] this.db.DeleteCheck error:%s", err)
-			}
+		}
+		err = this.db.DeleteCheck(k)
+		if err != nil {
+			log.Errorf("[checkDoneTx] this.db.DeleteCheck error:%s", err)
 		}
 	}
 
@@ -286,4 +286,12 @@ func (this *SyncService) waitForSideBlock() {
 	if err != nil {
 		log.Errorf("waitForSideBlock error:%s", err)
 	}
+}
+
+func checkIfExist(dir string) bool {
+	_, err := os.Stat(dir)
+	if err != nil && !os.IsExist(err) {
+		return false
+	}
+	return true
 }
